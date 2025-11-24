@@ -1,16 +1,20 @@
 <?xml version='1.0' encoding='utf-8'?>
-<sdf version="1.6">
+<sdf version="1.7">
   <world name="default">
     <gravity>0 0 -9.8</gravity>
-    <physics default="0" name="default_physics" type="ode">
+    <!-- <physics default="0" name="default_physics" type="dart">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1</real_time_factor>
       <real_time_update_rate>1000</real_time_update_rate>
+    </physics> -->
+    <physics default="1" name="default_physics" type="dart">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
     </physics>
     <scene>
-      <ambient>0.6 0.6 0.6 1</ambient>
-      <background>0.4 0.4 0.4 1</background>
-      <shadows>false</shadows>
+      <ambient>0.3 0.3 0.3 1</ambient>
+      <background>0.7 0.8 0.9 1</background>
+      <shadows>true</shadows>
     </scene>
 
     <!-- Plugin for simulating physics -->
@@ -47,8 +51,8 @@
     <light type="directional" name="sun">
       <cast_shadows>true</cast_shadows>
       <pose>0 0 10 0 0 0</pose>
-      <diffuse>0.8 0.8 0.8 1</diffuse>
-      <specular>0.2 0.2 0.2 1</specular>
+      <diffuse>1.0 0.95 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
       <attenuation>
         <range>1000</range>
         <constant>0.9</constant>
@@ -208,7 +212,7 @@
       <include>
         <uri>model://StorageRack</uri>
         <static>true</static>
-        <pose>9.07005 -10.3582 -7.57769e+08 -2e-06 0 0</pose>
+        <pose>9.07005 -10.3582 0 -2e-06 0 0</pose>
       </include>
     </model>
     <model name="CGMClassic_2">
@@ -250,14 +254,14 @@
       <include>
         <uri>model://WhiteChipChair</uri>
         <static>true</static>
-        <pose>-8.87142 9.15707 -7.57769e+08 0 -0.152685 0</pose>
+        <pose>-8.87142 9.15707 0 0 -0.152685 0</pose>
       </include>
     </model>
     <model name="TrolleyBed_1">
       <include>
         <uri>model://TrolleyBed</uri>
         <static>true</static>
-        <pose>4.85934 -4.87229 -7.57769e+08 0 -1e-06 0</pose>
+        <pose>4.85934 -4.87229 0 0 -1e-06 0</pose>
       </include>
     </model>
     <model name="SurgicalTrolley_1">
@@ -1078,6 +1082,72 @@
         <static>true</static>
         <pose>8.35378 9.64852 -3e-06 -6e-06 0 0</pose>
       </include>
+    </model>
+    <model name="blue_cone_1">
+      <include>
+        <uri>model://blue_cone</uri>
+        <static>true</static>
+        <pose>0.2 16.5 0 0 0 0</pose>
+      </include>
+    </model>
+    <model name="red_cone_1">
+      <include>
+        <uri>model://red_cone</uri>
+        <static>true</static>
+        <pose>1.2 16.5 0 0 0 0</pose>
+      </include>
+    </model>
+    <model name="green_cone_1">
+      <include>
+        <uri>model://green_cone</uri>
+        <static>true</static>
+        <pose>2.2 16.5 0 0 0 0</pose>
+      </include>
+    </model>
+    <model name="box_1">
+      <include>
+        <uri>model://box</uri>
+        <static>false</static>
+        <pose>0 12.0 0.5 0 0 0</pose>
+      </include>
+    </model>
+    <!-- <model name="danger_sign_1">
+      <include>
+        <uri>model://danger_sign</uri>
+        <static>true</static>
+        <pose>1.0 12.0 0 0 0 0</pose>
+      </include>
+    </model> -->
+    <model name="circle_sign_1">
+      <include>
+        <uri>model://circle_sign</uri>
+        <static>true</static>
+        <pose>0 10.0 0 0 0 0</pose>
+      </include>
+    </model>
+    <model name="goal_line_box">
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>
+            <diffuse>1 0 0 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+            <emissive>0 0 0 1</emissive>
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <box/>
+          </geometry>
+        </collision>
+      </link>
+      <pose>5 12 -0.499 0 0 0</pose>
     </model>
   </world>
 </sdf>
