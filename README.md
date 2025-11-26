@@ -824,6 +824,7 @@ The physical position (floor, table, etc.) does not matter. A good apple is edib
 **Goal**: Move to cone of specified color
 
 **Task Description**:
+
 The robot will receive a natural language command (e.g. "Go to the red cone"). Your system must navigate the robot to the specified colored cone. The navigation stops when robot `bark` to alert the position of the cone.
 
 
@@ -831,6 +832,7 @@ The robot will receive a natural language command (e.g. "Go to the red cone"). Y
 
 
 **Requirements**:
+
 There are three cones with different color (red, green, and blue). 
 The positions of cones will not be changed. But the order might be different. 
 For example, currently the order is blue cone, red cone, and green cone from left.
@@ -848,6 +850,7 @@ But that order might be changed to red, green, and blue.
 **Goal**: Move to box to the goal position
 
 **Task Description**:
+
 The robot will receive a natural language command (e.g. "Move the box to the goal position"). 
 Your system must push the box to the goal position with the robot body. The goal position is specified as red area.
 
@@ -856,6 +859,7 @@ Your system must push the box to the goal position with the robot body. The goal
 
 
 **Requirements**:
+
 The goal position (red area) will not be changed for the final competition.
 But the position of delivery box will be changed. 
 TAs will randomly choose position of delivery box among three candidates. 
@@ -875,8 +879,10 @@ Distance between goal area and delivery box is 2m, and the orientation of box wi
 **Goal**: Move to the empty room without stop sign
 
 **Task Description**:
+
 The robot will receive a natural language command (e.g. "Move to the empty room"). 
 There are two empty room in the hospital. You should go one of them without the stop sign.
+The stop sign will be placed near the entrance of the room to notice whether this room is allowed to go or not.
 
 
 <img src="images/mission_5_1.png" alt="Mission 5 1" width="600"/>
