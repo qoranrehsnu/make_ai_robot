@@ -894,9 +894,6 @@ The position of the stop sign will be changed (in front of empty room1 or room2,
 
 ---
 
-**Note**: Missions 3, 4, and 5 will be announced later in the semester. Students are encouraged to propose challenging and creative mission ideas that test different aspects of autonomous navigation, perception, and decision-making.
-
-
 # 💡 Helpful Tips for ROS2 Beginners
 
 ## Useful ROS2 Commands
