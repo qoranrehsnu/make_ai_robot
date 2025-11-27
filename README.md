@@ -518,7 +518,6 @@ You will build three essential modules for navigation:
 | Module | Points | Package Name |
 |--------|---------|--------------|
 | Localization | 20 pts | `localization` |
-| Path Planning | 0 pts | `path_planning` |
 | Perception | 10 pts | `perception` |
 
 Even though path planning is essential for navigation, because we provided enough source code through eTL, we do not use it for grading.
@@ -660,216 +659,83 @@ There are 3 ros bag data, whose score of each is (4, 8, 8), total 20. If you suc
 
 ---
 
-## Module Design 2. `path_planning` 
+## Module Design 2. `perception` 
 
-**Goal**: Create a `path_planning` package for collision-free path planning.
+This module focuses on building a **ROS2 perception system** capable of detecting objects, classifying them, estimating distance, and generating robot speech cues based on object position. The final output will be verified using the provided interface viewer.
 
-**Why this matters**: 
+**Goal**: Develop a ROS2 package named **`perception`** that performs real-time object detection using RGB + depth images and publishes formatted outputs for the system.
 
-With the localization module providing the robot's position, the robot needs to navigate from its current position to a desired goal. During movement, the robot must be aware of obstacles and avoid them. Since the environment contains only static obstacles, we use a pre-built map for planning.
+**Requirements**
 
+1. Subscribe to Camera Data
 
-**What you need to do:**
+Your node must subscribe to:
 
-Create a ROS2 package named `path_planning` with nodes (Python or C++) that:
+- **RGB Image**
+  - `/camera_top/image`
+- **Depth Image**
+  - `/camera_top/depth`
 
-1. **Subscribe to current robot pose**: 
-   - Topic: `/go1_pose`
-   - Message type: `geometry_msgs/msg/PoseStamped`
+### 2. Object Detection & Classification
 
-2. **Subscribe to goal pose**: 
-   - Topic: `/goal_pose`
-   - Message type: `geometry_msgs/msg/PoseStamped`
+Your perception node should:
 
-3. **Subscribe to map data**: 
-   - Topic: `/map`
-   - Message type: `nav_msgs/msg/OccupancyGrid`
+- Run an object detection model such as YOLO
+- Determine whether the target object exists
+- Use the depth image to obtain the distance to the target object
 
-4. **Plan a collision-free 2D path**: 
-   - Generate a path from the current pose to the goal pose
-   - Ensure the path avoids all obstacles in the map
-   - Consider robot size/footprint when checking collisions
+### 3. Required Published Topics
 
-5. **Smooth the path**: 
-   - Raw planned paths (e.g., from A*) have sharp turns
-   - Apply smoothing (e.g., Bezier curves, spline interpolation)
-   - Ensure smoothed path remains collision-free
+The node must publish the following:
 
-6. **Publish the path**: 
-   - Topic: `/local_path`
-   - Message type: `nav_msgs/msg/Path`
-   - This path will be used by the `path_tracker` node 
+| Topic | Type | Description |
+|------|------|-------------|
+| `/camera/detections/image` | `sensor_msgs/Image` | Original RGB image with bounding boxes |
+| `/detections/labels` | `std_msgs/String` | Detected object label(s) |
+| `/detections/distance` | `std_msgs/Float32` | Distance to the detected object |
+| `/robot_dog/speech` | `std_msgs/String` | `"bark"` if an edible object is centered, otherwise `"None"` |
 
-**Related Topics:**
-| Topic | Message Type | Description |
-|-------|--------------|-------------|
-| `/go1_pose` | geometry_msgs/msg/PoseStamped | Robot pose (x, y, z, qx, qy, qz, qw)|
-| `/goal_pose` | geometry_msgs/msg/PoseStamped | Robot goal pose (x, y, z, qx, qy, qz, qw)|
-| `/map` | nav_msgs/msg/OccupancyGrid | 2D occupancy grid map for localization |
-| `/local_path` | nav_msgs/msg/Path | 2D path message for path planning |
+#### Center Region Rule
+
+- The image's leftmost and rightmost **1/5** regions are *excluded*.
+- If an edible object is detected whose bounding-box center lies within the **middle 3/5** of the image → publish `"bark"`.
+### 4. Interface Verification
+
+<img src="images/perception_module_example.png" alt="Perception Module Example" width="600"/>
+
+Run the viewer to verify all published topics:
+
+```bash
+ros2 launch module_test interface_viewer.launch.py
+```
+
 
 **Learning Steps:**
-
-1. **Explore available topics**:
-   - Use the following commands:
-     - `ros2 topic list` - List all topics
-     - `ros2 topic info <topic_name> --verbose` - Topic details
-     - `ros2 topic echo /map` - Inspect map structure
-     - `ros2 topic echo /goal_pose` - See goal format
-
-2. **Study reference code**:
-   - **`move_go1.py`**: Understand how to:
-     - Subscribe to pose topics
-     - Generate simple paths
-     - Publish path messages to `/local_path`
-     - Structure `nav_msgs/msg/Path` messages
-
-3. **Study path planning algorithms**: 
-   - **Search-based**: A*, Dijkstra, RRT, RRT*
-   - **Graph-based**: Visibility graphs, Voronoi diagrams
-   - **Smoothing**: Bezier curves, B-splines, gradient descent smoothing
-   - **Collision checking**: Distance transforms, occupancy grid queries
-
-4. **Implement your path planning package**:
-   - Start with A* or Dijkstra on the occupancy grid
-   - Add post-processing to smooth the path
-   - Test with various start and goal positions
-   - Optimize for computation time
-
-### ⚠️ Important Requirements: 
-
-1. **Create a Complete Map**: 
-   - ⚠️ **CRITICAL**: The current map in the `maps` folder is incomplete
-   - It contains only the building walls, not furniture, people, or other obstacles
-   - You **must** create your own complete map for effective obstacle avoidance
-   - Position of some objects will be changed for the real competition (box, food, etc), so you might capture the map without them. 
-   - See the "Build New Map" section at the end of this README for instructions
-   - Map quality directly affects path planning performance
-
-3. **Tune MPPI Parameters**: 
-   - The path tracker uses MPPI (Model Predictive Path Integral) control
-   - Default parameters in `path_tracker/config/mppi.yaml` may not be optimal
-   - Adjust parameters such as:
-     - Number of samples
-     - Time horizon
-     - Control costs (linear/angular velocity penalties)
-     - Path tracking weight
-   - Better tuning improves path following accuracy
-
----
-
-## Module Design 3. `perception` 
-
-**Goal**: Create a `perception` package for object detection and localization.
-
-**Why this matters**: 
-
-To find a desired object, the robot needs to interpret camera images, determine whether the target object is present, and if so, localize it. The robot must then move closer to the object and align itself so that the object is centered in its field of view. 
-
-
-**What you need to do:**
-
-Create a ROS2 package named `perception` with nodes (Python or C++) that:
-
-1. **Subscribe to camera data**:
-   - RGB images: `/camera_face/image` or `/camera_top/image`
-   - Depth images: `/camera_face/depth` or `/camera_top/depth`
-   - Camera info: `/camera_face/camera_info` or `/camera_top/camera_info`
-
-2. **Detect and classify objects**:
-   - Run an object detection model (e.g., YOLO)
-   - Determine whether the target object exists in the image
-   - Distinguish between good food (edible) and bad food (not edible) - Refer mission 2
-
-3. **Approach and center the object**:
-   - If the target object is detected, command the robot to move closer
-   - Use depth information to estimate distance
-   - Align the robot so the object appears at the horizontal center of the image
-
-4. **Trigger "bark" action**:
-   - Publish string message `"bark"` to the `/bark` topic
-   - Publish **5 times at 1 Hz** (5 messages, 1 second apart)The robot body should be in the room.
-     - Object is within **3 meters** (use depth camera data)
-     - Object is **horizontally centered**: object center in range [image_width/3, 2×image_width/3]
-     - Object is correctly classified as edible food
-
-**Related Topics:**
-| Topic | Message Type | Description |
-|-------|--------------|-------------|
-| `/go1_pose` | geometry_msgs/msg/PoseStamped | Robot pose (x, y, z, qx, qy, qz, qw)|
-| `/camera_face/camera_info` | sensor_msgs/msg/CameraInfo | Camera information of face camera |
-| `/camera_face/image` | sensor_msgs/msg/Image | RGB image of face camera |
-| `/camera_face/depth` | sensor_msgs/msg/Image | Depth image of face camera |
-| `/camera_face/points` | sensor_msgs/msg/PointCloud2 | Colored point cloud of face camera |
-| `/camera_top/camera_info` | sensor_msgs/msg/CameraInfo | Camera information of top camera |
-| `/camera_top/image` | sensor_msgs/msg/Image | RGB image of top camera |
-| `/camera_top/depth` | sensor_msgs/msg/Image | Depth image of top camera |
-| `/camera_top/points` | sensor_msgs/msg/PointCloud2 | Colored point cloud of top camera |
-
-**Learning Steps:**
-
-1. **Explore available camera topics**:
-   - Use the following commands:
-     - `ros2 topic list` - List all topics
-     - `ros2 topic info /camera_face/image --verbose` - Get image topic details
-     - `ros2 topic hz /camera_face/image` - Check camera frame rate
-     - `ros2 topic echo /camera_face/depth --no-arr` - Inspect depth data structure
-
-2. **Study reference code**:
-   - **`publish_pointcloud.py`**: Learn how to:
-     - Subscribe to RGB and depth images using `message_filters`
-     - Convert ROS Image messages to OpenCV/NumPy format using `cv_bridge`
-     - Synchronize multiple sensor streams
-     - Publish processed data to topics
-
-3. **Study computer vision and machine learning**: 
+1. **Study computer vision and machine learning**: 
    - **Object Detection**: YOLO, DETR, etc
    - **Data Collection**: Capture images from simulation, label using tools like LabelImg or Roboflow
    - **Model Training**: Fine-tune pre-trained models on custom food dataset
    - **Depth Processing**: Extract distance from depth images, handle invalid depth values
    - **Visual Servoing**: Align robot with object using visual feedback
 
-4. **Implement your perception package**:
+2. **Implement your perception package**:
    - Start with a pre-trained object detection model
    - Collect training data for good/bad food from the simulation
    - Fine-tune the model for your specific objects
    - Integrate depth sensing for distance estimation
    - Implement control logic for approaching and centering
 
-
 ### 📊 Evaluation:
 
-**TO BE UPDATED BY OTHER TA**
-
-**TO BE UPDATED BY OTHER TA**
-
-**TO BE UPDATED BY OTHER TA**
-
-**Points**: 10 points (relative grading among teams)
+**Points**: 10 points (absolute evaluation)
 
 **Evaluation Process**: 
-The TAs will test your perception module 3 times. At each test, the robot will be placed in a small room **(the empty room in the hospital)** with one good food item and one bad food item (see competition mission 2 for food examples and mission 5 to find where the empty room is) **There would be no object at the first scene.** Robot need to travel the room little bit. **Rotating with fixed position would be enough to find objects.** The robot must:
-- Detect and distinguish between good and bad food
-- Approach the good food
-- Center itself in front of the good food
-- Bark when properly positioned
-- Stop moving after barking
+A ROS bag will be provided. You will replay the ROS bag, run the provided launch file, record the viewer output as a video, and submit the recording.
 
-**Evaluation Metrics**:
-
-1. **Distance to Target**: 
-   - Measured after the final bark message
-   - Distance between robot and good food object
-   - Closer is better (target: within 3 meters)
-
-2. **Centering Accuracy**: 
-   - Measured after the final bark message
-   - Horizontal position of the object in the camera image
-   - Target: object center within middle third of image [width/3, 2×width/3]
-
-3. **Classification Accuracy**:
-   - Penalty if robot barks at bad food or fails to identify good food 
-  
+**Evaluation Criteria**:
+Assessment follows an absolute and qualitative evaluation. If an edible object is centered within a distance of 3 meters or less, the evaluator checks whether:
+- the intermediate outputs (detection results, distance) are correct, and
+- the bark topic is published at the appropriate moment.
 ---
 
 # ⚔️ Competition
