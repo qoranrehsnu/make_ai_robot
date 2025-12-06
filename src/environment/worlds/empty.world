@@ -57,15 +57,15 @@
       </uri>
     </include>
 
-        <!-- ===== OBJECT GRID WITH DISHES (0.5m spacing, square perimeter) ===== -->
 
-    <!-- Row TOP edge: y = 1.0 -->
-    <!-- apple_good -->
+      <!-- ===== OBJECTS (random positions within -1.5 ~ 1.5m, avoid robot spawn x=-1,y=0) ===== -->
+
+    <!-- apple_good (dish + apple) -->
     <model name="dish_apple_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>-1.0 1.0 0.20 0 0 0</pose>
+        <pose>1.335 -0.133 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -73,16 +73,16 @@
       <include>
         <uri>model://AppleGood</uri>
         <static>true</static>
-        <pose>-1.0 1.0 0.25 0 0 0</pose>
+        <pose>1.335 -0.133 0.25 0 0 0</pose>
       </include>
     </model>
 
-    <!-- banana_good -->
+    <!-- banana_good (dish + banana) -->
     <model name="dish_banana_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>-0.5 1.0 0.20 0 0 0</pose>
+        <pose>0.150 0.673 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -90,16 +90,16 @@
       <include>
         <uri>model://BananaGood</uri>
         <static>true</static>
-        <pose>-0.5 1.0 0.25 0 0 0</pose>
+        <pose>0.150 0.673 0.25 0 0 0</pose>
       </include>
     </model>
 
-    <!-- pizza_good -->
+    <!-- pizza_good (dish + pizza) -->
     <model name="dish_pizza_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.0 1.0 0.20 0 0 0</pose>
+        <pose>1.052 0.508 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -107,16 +107,16 @@
       <include>
         <uri>model://PizzaGood</uri>
         <static>true</static>
-        <pose>0.0 1.0 0.25 0 0 0</pose>
+        <pose>1.052 0.508 0.25 0 0 0</pose>
       </include>
     </model>
 
-    <!-- apple_bad -->
+    <!-- apple_bad (dish + apple_bad) -->
     <model name="dish_apple_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.5 1.0 0.20 0 0 0</pose>
+        <pose>1.011 -0.423 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -124,16 +124,16 @@
       <include>
         <uri>model://AppleBad</uri>
         <static>true</static>
-        <pose>0.5 1.0 0.25 0 0 0</pose>
+        <pose>1.011 -0.423 0.25 0 0 0</pose>
       </include>
     </model>
 
-    <!-- banana_bad -->
+    <!-- banana_bad (dish + banana_bad) -->
     <model name="dish_banana_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>1.0 1.0 0.20 0 0 0</pose>
+        <pose>-0.077 0.314 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -141,17 +141,16 @@
       <include>
         <uri>model://BananaBad</uri>
         <static>true</static>
-        <pose>1.0 1.0 0.25 0 0 0</pose>
+        <pose>-0.077 0.314 0.25 0 0 0</pose>
       </include>
     </model>
 
-    <!-- RIGHT edge: x = 1.0 -->
-    <!-- pizza_bad -->
+    <!-- pizza_bad (dish + pizza_bad) -->
     <model name="dish_pizza_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>1.0 0.5 0.20 0 0 0</pose>
+        <pose>0.121 -1.254 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -159,32 +158,34 @@
       <include>
         <uri>model://PizzaBad</uri>
         <static>true</static>
-        <pose>1.0 0.5 0.25 0 0 0</pose>
+        <pose>0.121 -1.254 0.25 0 0 0</pose>
       </include>
     </model>
 
+    <!-- toilet -->
     <model name="toilet_1">
       <include>
         <uri>model://Toilet</uri>
         <static>true</static>
-        <pose>1.0 0.0 0.0 0 0 0</pose>
+        <pose>-0.492 -1.002 0.0 0 0 0</pose>
       </include>
     </model>
 
+    <!-- nurse -->
     <model name="nurse_1">
       <include>
         <uri>model://Scrubs</uri>
         <static>true</static>
-        <pose>1.0 -0.5 0.0 0 0 0</pose>
+        <pose>-0.818 1.259 0.0 0 0 0</pose>
       </include>
     </model>
 
-    <!-- BOTTOM edge: y = -1.0 -->
+    <!-- cones -->
     <model name="cone_red_1">
       <include>
         <uri>model://red_cone</uri>
         <static>true</static>
-        <pose>1.0 -1.0 0 0 0 0</pose>
+        <pose>1.344 1.395 0 0 0 0</pose>
       </include>
     </model>
 
@@ -192,7 +193,7 @@
       <include>
         <uri>model://blue_cone</uri>
         <static>true</static>
-        <pose>0.5 -1.0 0 0 0 0</pose>
+        <pose>-0.861 -1.293 0 0 0 0</pose>
       </include>
     </model>
 
@@ -200,20 +201,20 @@
       <include>
         <uri>model://green_cone</uri>
         <static>true</static>
-        <pose>0.0 -1.0 0 0 0 0</pose>
+        <pose>0.809 0.163 0 0 0 0</pose>
       </include>
     </model>
 
+    <!-- box -->
     <model name="box_1">
       <include>
         <uri>model://box</uri>
         <static>false</static>
-        <pose>-0.5 -1.0 0.5 0 0 0</pose>
+        <pose>0.790 0.929 0.5 0 0 0</pose>
       </include>
     </model>
 
-    <!-- LEFT edge: x = -1.0 -->
-    <!-- tile_red: moved to bottom-left corner on perimeter -->
+    <!-- tile_red -->
     <model name="tile_red">
       <static>true</static>
       <link name="link">
@@ -231,22 +232,17 @@
           </material>
         </visual>
       </link>
-      <pose>-1.0 -1.0 -0.025 0 0 0</pose>
+      <pose>-1.337 1.201 -0.025 0 0 0</pose>
     </model>
 
-    <!-- stop_sign: left edge middle -->
+    <!-- stop_sign -->
     <model name="stop_sign_1">
       <include>
         <uri>model://circle_sign</uri>
         <static>true</static>
-        <pose>-1.0 -0.5 0.0 0 0 0</pose>
+        <pose>0.495 -0.609 0.0 0 0 0</pose>
       </include>
     </model>
-
-   
-
-
-    
 
 
 
