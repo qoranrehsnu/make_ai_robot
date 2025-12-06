@@ -57,17 +57,15 @@
       </uri>
     </include>
 
-    <!-- ===== OBJECT GRID (0.5m spacing) ===== -->
+        <!-- ===== OBJECT GRID WITH DISHES (0.5m spacing, square perimeter) ===== -->
 
-    <!-- Row 0: apple / banana / pizza / bad_apple -->
-        <!-- ===== OBJECT GRID WITH DISHES (0.5m spacing) ===== -->
-
-    <!-- Row 0: apple_good -->
+    <!-- Row TOP edge: y = 1.0 -->
+    <!-- apple_good -->
     <model name="dish_apple_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.0 0.0 0.20 0 0 0</pose>
+        <pose>-1.0 1.0 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -75,17 +73,16 @@
       <include>
         <uri>model://AppleGood</uri>
         <static>true</static>
-        <pose>0.0 0.0 0.25 0 0 0</pose>
+        <pose>-1.0 1.0 0.25 0 0 0</pose>
       </include>
     </model>
-
 
     <!-- banana_good -->
     <model name="dish_banana_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.5 0.0 0.20 0 0 0</pose>
+        <pose>-0.5 1.0 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -93,17 +90,16 @@
       <include>
         <uri>model://BananaGood</uri>
         <static>true</static>
-        <pose>0.5 0.0 0.25 0 0 0</pose>
+        <pose>-0.5 1.0 0.25 0 0 0</pose>
       </include>
     </model>
-
 
     <!-- pizza_good -->
     <model name="dish_pizza_good">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>1.0 0.0 0.20 0 0 0</pose>
+        <pose>0.0 1.0 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -111,17 +107,16 @@
       <include>
         <uri>model://PizzaGood</uri>
         <static>true</static>
-        <pose>1.0 0.0 0.25 0 0 0</pose>
+        <pose>0.0 1.0 0.25 0 0 0</pose>
       </include>
     </model>
-
 
     <!-- apple_bad -->
     <model name="dish_apple_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>1.5 0.0 0.20 0 0 0</pose>
+        <pose>0.5 1.0 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -129,17 +124,16 @@
       <include>
         <uri>model://AppleBad</uri>
         <static>true</static>
-        <pose>1.5 0.0 0.25 0 0 0</pose>
+        <pose>0.5 1.0 0.25 0 0 0</pose>
       </include>
     </model>
 
-
-    <!-- Row 1: banana_bad -->
+    <!-- banana_bad -->
     <model name="dish_banana_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.0 -0.5 0.20 0 0 0</pose>
+        <pose>1.0 1.0 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -147,17 +141,17 @@
       <include>
         <uri>model://BananaBad</uri>
         <static>true</static>
-        <pose>0.0 -0.5 0.25 0 0 0</pose>
+        <pose>1.0 1.0 0.25 0 0 0</pose>
       </include>
     </model>
 
-
+    <!-- RIGHT edge: x = 1.0 -->
     <!-- pizza_bad -->
     <model name="dish_pizza_bad">
       <include>
         <uri>model://WhiteDish</uri>
         <static>true</static>
-        <pose>0.5 -0.5 0.20 0 0 0</pose>
+        <pose>1.0 0.5 0.20 0 0 0</pose>
       </include>
     </model>
 
@@ -165,7 +159,7 @@
       <include>
         <uri>model://PizzaBad</uri>
         <static>true</static>
-        <pose>0.5 -0.5 0.25 0 0 0</pose>
+        <pose>1.0 0.5 0.25 0 0 0</pose>
       </include>
     </model>
 
@@ -173,7 +167,7 @@
       <include>
         <uri>model://Toilet</uri>
         <static>true</static>
-        <pose>1.0 -0.5 0.0 0 0 0</pose>
+        <pose>1.0 0.0 0.0 0 0 0</pose>
       </include>
     </model>
 
@@ -181,16 +175,16 @@
       <include>
         <uri>model://Scrubs</uri>
         <static>true</static>
-        <pose>1.5 -0.5 0.0 0 0 0</pose>
+        <pose>1.0 -0.5 0.0 0 0 0</pose>
       </include>
     </model>
 
-    <!-- Row 2: red / blue / green cone / box -->
+    <!-- BOTTOM edge: y = -1.0 -->
     <model name="cone_red_1">
       <include>
         <uri>model://red_cone</uri>
         <static>true</static>
-        <pose>0.0 -1.0 0 0 0 0</pose>
+        <pose>1.0 -1.0 0 0 0 0</pose>
       </include>
     </model>
 
@@ -206,7 +200,7 @@
       <include>
         <uri>model://green_cone</uri>
         <static>true</static>
-        <pose>1.0 -1.0 0 0 0 0</pose>
+        <pose>0.0 -1.0 0 0 0 0</pose>
       </include>
     </model>
 
@@ -214,12 +208,12 @@
       <include>
         <uri>model://box</uri>
         <static>false</static>
-        <pose>1.5 -1.0 0.5 0 0 0</pose>
+        <pose>-0.5 -1.0 0.5 0 0 0</pose>
       </include>
     </model>
 
-    <!-- Row 3: tile_red (goal_line_box) / stop_sign -->
-    <!-- tile_red: 병원 맵의 goal_line_box를 원점 근처로 옮긴 버전 -->
+    <!-- LEFT edge: x = -1.0 -->
+    <!-- tile_red: moved to bottom-left corner on perimeter -->
     <model name="tile_red">
       <static>true</static>
       <link name="link">
@@ -237,18 +231,18 @@
           </material>
         </visual>
       </link>
-      <!-- 바닥 바로 아래에 깔리는 타일 느낌으로 z를 약간 음수로 -->
-      <pose>0.0 -1.5 -0.025 0 0 0</pose>
+      <pose>-1.0 -1.0 -0.025 0 0 0</pose>
     </model>
 
-    <!-- stop_sign: 병원 맵의 circle_sign -->
+    <!-- stop_sign: left edge middle -->
     <model name="stop_sign_1">
       <include>
         <uri>model://circle_sign</uri>
         <static>true</static>
-        <pose>0.5 -1.5 0.0 0 0 0</pose>
+        <pose>-1.0 -0.5 0.0 0 0 0</pose>
       </include>
     </model>
+
    
 
 
