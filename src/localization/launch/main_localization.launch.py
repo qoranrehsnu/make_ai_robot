@@ -8,6 +8,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+
 def generate_launch_description():
     # 패키지 경로
     loc_pkg_dir = get_package_share_directory('localization')
@@ -16,20 +17,20 @@ def generate_launch_description():
     # hospital map
     map_file = os.path.join(sim_pkg_dir, 'maps', 'hospital.yaml')
 
-    # 기본 pose 설정 (global_localizer 기본 시작 위치)
+    # launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     x = LaunchConfiguration('x', default='0.0')
-    y = LaunchConfiguration('y', default='1.0')     # ★ default 1.0 으로 수정
+    y = LaunchConfiguration('y', default='1.0')
     yaw = LaunchConfiguration('yaw', default='0.0')
 
     return LaunchDescription([
-        # 공통 인자 선언
+        # Arguments
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('x', default_value='0.0'),
-        DeclareLaunchArgument('y', default_value='1.0'),   # ★ 기본 y=1.0
+        DeclareLaunchArgument('y', default_value='1.0'),
         DeclareLaunchArgument('yaw', default_value='0.0'),
 
-        # 1. Map Server
+        # 1. Map server
         Node(
             package='nav2_map_server',
             executable='map_server',
@@ -53,7 +54,7 @@ def generate_launch_description():
             ]
         ),
 
-        # 2. Odom Localizer
+        # 2. Odom localizer
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(loc_pkg_dir, 'launch', 'odom_localizer.launch.py')
@@ -61,7 +62,7 @@ def generate_launch_description():
             launch_arguments={'use_sim_time': use_sim_time}.items(),
         ),
 
-        # 3. Global Localizer (기본 pose = 0, 1, 0)
+        # 3. Global localizer
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(loc_pkg_dir, 'launch', 'global_localizer.launch.py')
@@ -72,5 +73,19 @@ def generate_launch_description():
                 'y': y,
                 'yaw': yaw
             }.items(),
+        ),
+
+        # 4. ✅ Pose publisher (METHOD B)
+        Node(
+            package='localization',
+            executable='go1_pose_publisher.py',
+            name='go1_pose_publisher',
+            output='screen',
+            parameters=[
+                {'use_sim_time': use_sim_time},
+                {'map_frame': 'map'},
+                {'base_frame': 'base'},
+                {'publish_rate_hz': 20.0},
+            ]
         ),
     ])

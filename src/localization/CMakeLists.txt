@@ -24,6 +24,7 @@ install(
     localization/odom_localizer_node.py
     localization/global_localizer_node.py
     localization/utils.py
+    localization/go1_pose_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

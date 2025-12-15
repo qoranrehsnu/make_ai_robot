@@ -39,10 +39,13 @@ def generate_launch_description():
 
     #D. Robot Control
     control_node = ExecuteProcess(
-        cmd=['gnome-terminal', '--', 'ros2', 'run', 'unitree_guide2', 'junior_ctrl'],
+        cmd=[
+            'gnome-terminal', '--', 
+            'ros2', 'run', 'unitree_guide2', 'junior_ctrl',
+            '--ros-args', '-p', 'use_sim_time:=true'
+        ],
         output='screen'
     )
-
     # E. Planner & Tracker
     planner_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_plan, 'launch', 'astar_planner.launch.py')),
@@ -69,9 +72,9 @@ def generate_launch_description():
     ld.add_action(TimerAction(period=5.0, actions=[control_node]))
 
     # 10s: Start Localization
-    ld.add_action(TimerAction(period=10.0, actions=[odom_loc_launch, global_loc_launch]))
+    ld.add_action(TimerAction(period=50.0, actions=[odom_loc_launch, global_loc_launch]))
 
     # 15s: Start Planning & Tracking Stack
-    ld.add_action(TimerAction(period=15.0, actions=[planner_launch, path_tracker_launch]))
+    ld.add_action(TimerAction(period=55.0, actions=[planner_launch, path_tracker_launch]))
 
     return ld
