@@ -51,6 +51,7 @@ public:
   
   // Set the map
   void setMap(const std::vector<std::vector<int>>& map);
+  void setCostMap(const std::vector<std::vector<float>>& cost_map); // ✅ 추가
   
   // Find path using A* algorithm
   std::vector<GridCell> findPath(const GridCell& start, const GridCell& goal);
@@ -61,6 +62,8 @@ public:
   
 private:
   std::vector<std::vector<int>> map_;
+  std::vector<std::vector<float>> cost_map_; // ✅ 추가
+  
   int map_width_;
   int map_height_;
   
@@ -83,4 +86,3 @@ private:
 }  // namespace astar_planner
 
 #endif  // ASTAR_PLANNER__ASTAR_HPP_
-

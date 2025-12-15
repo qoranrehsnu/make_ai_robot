@@ -22,7 +22,10 @@ void AStar::setMap(const std::vector<std::vector<int>>& map)
     map_width_ = map_[0].size();
   }
 }
-
+void AStar::setCostMap(const std::vector<std::vector<float>>& cost_map)
+{
+  cost_map_ = cost_map;
+}
 double AStar::calculateHeuristic(const GridCell& a, const GridCell& b) const
 {
   // Euclidean distance
@@ -158,7 +161,11 @@ std::vector<GridCell> AStar::findPath(const GridCell& start, const GridCell& goa
       double dy = static_cast<double>(neighbor.y - current.cell.y);
       double movement_cost = std::sqrt(dx * dx + dy * dy);
       double tentative_g = current.g_cost + movement_cost;
-      
+            // ✅ [추가] cost map penalty (벽 가까울수록 비용↑)
+      if (!cost_map_.empty()) {
+        // cost_map_은 PathPlannerNode에서 width/height 맞춰서 만들어서 넣어줄 예정
+        tentative_g += static_cast<double>(cost_map_[neighbor.y][neighbor.x]);
+      }
       // Check if this path is better
       auto it = g_score.find(neighbor);
       if (it == g_score.end() || tentative_g < it->second) {
