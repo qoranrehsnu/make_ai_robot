@@ -46,7 +46,7 @@ public:
 
     // Subscribers
     map_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
-      "/map",
+      "/map", 
       rclcpp::QoS(rclcpp::KeepLast(1))
         .transient_local()
         .reliable(),
@@ -100,7 +100,7 @@ private:
           raw_grid[y][x] = 0;
         }
       }
-    }
+        }
 
     // =========================
     // ✅ [수정 4] 장애물 인플레이션(벽 두껍게)
