@@ -1,638 +1,312 @@
 #!/usr/bin/env python3
-'''
-"""
-ROS2 global localizer node (Custom Particle Filter / MCL Implementation)
-- Implements Monte Carlo Localization from scratch (No Nav2).
-- Optimized with NumPy vectorization.
-- Safe fallback: Uses SciPy if available, otherwise pure NumPy.
-- Publishes /go1_pose for grading.
-"""
-
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TransformStamped, PoseStamped
+from rclpy.qos import qos_profile_sensor_data
+
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster, Buffer, TransformListener
-import tf_transformations
+
 import numpy as np
+import tf_transformations
 
-# utils.py에서 함수 가져오기 (같은 폴더에 있어야 함)
-from utils import map_to_pcd, pose_to_matrix
+from utils import map_to_pcd, build_kdtree, wrap_angle
 
-# [Safety Strategy] Check if scipy is installed
-try:
-    from scipy.spatial import cKDTree
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
 
-class ParticleFilterLocalizer(Node):
+class GlobalLocalizerPF1to1(Node):
+    """
+    Particle Filter for map->odom correction (1:1 follow mode).
+    Publishes TF: map -> odom
+
+    목표:
+      - map이 "덜 움직이는" 현상 제거
+      - TF low-pass, stride 감쇠, yaw freeze 제거
+      - PF 추정치로 계산된 map->odom을 그대로 출력 (즉시 반영)
+    """
+
     def __init__(self):
-        super().__init__('global_localizer')
-        
-        # 1. Parameters (Launch File에서 넘어온 값들)
-        self.declare_parameter('x', 0.0)
-        self.declare_parameter('y', 0.0)
-        self.declare_parameter('yaw', 0.0)
-        self.declare_parameter('num_particles', 80)  #200은 너무 많아서 줄임
-        
-        self.initial_x = self.get_parameter('x').value
-        self.initial_y = self.get_parameter('y').value
-        self.initial_yaw = self.get_parameter('yaw').value
-        self.num_particles = self.get_parameter('num_particles').value
+        super().__init__("global_localizer_node")
 
-        # Warning if Scipy is missing (Safety Check)
-        if not HAS_SCIPY:
-            self.get_logger().warn("SciPy not found! Running in slower NumPy fallback mode.")
-            # Fallback mode needs fewer particles to maintain rate
-            if self.num_particles > 100:
-                self.num_particles = 100
-                self.get_logger().warn(f"Reduced particles to {self.num_particles} for performance.")
+        # Topics / frames
+        self.declare_parameter("map_topic", "/map")
+        self.declare_parameter("scan_topic", "/scan")
+        self.declare_parameter("map_frame", "map")
+        self.declare_parameter("odom_frame", "odom")
+        self.declare_parameter("base_frame", "base")  # 네 환경 기준
 
-        # Noise Parameters (Motion Model) - 튜닝 포인트
-        self.odom_noise = [0.05, 0.05, 0.02] # x, y, yaw std_dev
-        
-        # Sensor Model Parameters - 튜닝 포인트
-        self.scan_step = 15  # 최적화: 레이저 빔 15개당 1개만 계산 (속도 향상)
-        self.map_sigma = 0.2 # Likelihood sigma (meters)
+        # PF params
+        self.declare_parameter("num_particles", 350)
+        self.declare_parameter("init_x", 0.0)
+        self.declare_parameter("init_y", 1.0)
+        self.declare_parameter("init_yaw", 0.0)
+        self.declare_parameter("init_std_xy", 0.6)
+        self.declare_parameter("init_std_yaw_deg", 25.0)
 
-        # 2. ROS Setup
+        self.declare_parameter("odom_noise_xy", 0.02)
+        self.declare_parameter("odom_noise_yaw_deg", 1.5)
+
+        # Measurement
+        self.declare_parameter("scan_step", 15)
+        self.declare_parameter("max_scan_points", 70)
+        self.declare_parameter("map_sigma", 0.45)
+        self.declare_parameter("resample_thresh", 0.6)
+
+        # 1:1 follow output
+        self.declare_parameter("pf_update_stride", 1)  # 반드시 1
+        self.declare_parameter("tf_alpha", 1.0)        # 반드시 1.0 (LPF off)
+        self.declare_parameter("freeze_yaw", False)
+        self.declare_parameter("yaw_alpha", 1.0)       # 즉시 반영
+
+        # publish
+        self.declare_parameter("publish_rate_hz", 30.0)
+        self.declare_parameter("log_every_n_scans", 30)
+
+        # Load params
+        self.map_topic = self.get_parameter("map_topic").value
+        self.scan_topic = self.get_parameter("scan_topic").value
+        self.map_frame = self.get_parameter("map_frame").value
+        self.odom_frame = self.get_parameter("odom_frame").value
+        self.base_frame = self.get_parameter("base_frame").value
+
+        self.N = int(self.get_parameter("num_particles").value)
+
+        self.init_x = float(self.get_parameter("init_x").value)
+        self.init_y = float(self.get_parameter("init_y").value)
+        self.init_yaw = float(self.get_parameter("init_yaw").value)
+
+        init_std_xy = float(self.get_parameter("init_std_xy").value)
+        init_std_yaw = np.deg2rad(float(self.get_parameter("init_std_yaw_deg").value))
+
+        self.odom_noise = np.array([
+            float(self.get_parameter("odom_noise_xy").value),
+            float(self.get_parameter("odom_noise_xy").value),
+            np.deg2rad(float(self.get_parameter("odom_noise_yaw_deg").value)),
+        ], dtype=np.float64)
+
+        self.scan_step = int(self.get_parameter("scan_step").value)
+        self.max_scan_points = int(self.get_parameter("max_scan_points").value)
+        self.map_sigma = float(self.get_parameter("map_sigma").value)
+        self.resample_thresh = float(self.get_parameter("resample_thresh").value)
+
+        self.pf_update_stride = int(self.get_parameter("pf_update_stride").value)
+        self.tf_alpha = float(self.get_parameter("tf_alpha").value)
+        self.freeze_yaw = bool(self.get_parameter("freeze_yaw").value)
+        self.yaw_alpha = float(self.get_parameter("yaw_alpha").value)
+
+        pub_hz = float(self.get_parameter("publish_rate_hz").value)
+        self.log_every_n_scans = int(self.get_parameter("log_every_n_scans").value)
+
+        # ROS
+        self.create_subscription(OccupancyGrid, self.map_topic, self.map_cb, 1)
+        self.create_subscription(LaserScan, self.scan_topic, self.scan_cb, qos_profile_sensor_data)
+
         self.tf_broadcaster = TransformBroadcaster(self)
-        
-        # [중요 수정] 시뮬레이션 시간(Sim Time) 동기화를 위해 clock 전달 -> TF_OLD_DATA 에러 해결
-        self.tf_buffer = Buffer(node=self)
+        self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Subscribers
-        self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
-        self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        
-        # [추가] 과제 제출용 Pose Publisher (/go1_pose)
-        self.pose_pub = self.create_publisher(PoseStamped, '/go1_pose', 10)
+        self.timer = self.create_timer(1.0 / pub_hz, self.publish_tf_timer)
 
-        # 3. State Variables
+        # PF state
+        self.p = np.zeros((self.N, 3), dtype=np.float64)
+        self.w = np.ones(self.N, dtype=np.float64) / self.N
+
+        self.p[:, 0] = self.init_x + np.random.normal(0.0, init_std_xy, self.N)
+        self.p[:, 1] = self.init_y + np.random.normal(0.0, init_std_xy, self.N)
+        self.p[:, 2] = wrap_angle(self.init_yaw + np.random.normal(0.0, init_std_yaw, self.N))
+
         self.map_pcd = None
-        self.particles = None 
-        self.weights = None   
-        self.T_map_odom = np.eye(4)
-        self.last_odom_pose = None
-        self.processing = False
+        self.map_tree = None
 
-        # Initialize Particles
-        self.initialize_particles()
-        
-        # Publish initial TF immediately
-        self.broadcast_tf(self.get_clock().now().to_msg())
+        self.last_odom = None
 
-    def initialize_particles(self):
-        """초기 위치 주변에 가우시안 분포로 파티클 생성"""
-        self.particles = np.empty((self.num_particles, 3))
-        self.particles[:, 0] = self.initial_x + np.random.normal(0, 0.2, self.num_particles)
-        self.particles[:, 1] = self.initial_y + np.random.normal(0, 0.2, self.num_particles)
-        self.particles[:, 2] = self.initial_yaw + np.random.normal(0, 0.1, self.num_particles)
-        self.weights = np.ones(self.num_particles) / self.num_particles
-        self.get_logger().info(f"Initialized {self.num_particles} particles at ({self.initial_x}, {self.initial_y})")
+        # map->odom TF state (start from init)
+        self.last_tf_map_to_odom = np.array([self.init_x, self.init_y, self.init_yaw], dtype=np.float64)
 
-    def map_callback(self, msg):
-        if self.map_pcd is None:
-            self.get_logger().info("Processing Map...")
-            # utils.py의 map_to_pcd 사용
-            self.map_pcd = map_to_pcd(msg, threshold=50)
-            self.get_logger().info(f"Map Loaded. {len(self.map_pcd)} points.")
+        self.scan_count = 0
+
+        self.get_logger().info("[GLOBAL 1:1] started (tf_alpha=1.0, stride=1, yaw unfrozen)")
+
+    def map_cb(self, msg: OccupancyGrid):
+        self.map_pcd = map_to_pcd(msg, threshold=50)
+        self.map_tree = build_kdtree(self.map_pcd)
+        self.get_logger().info(f"[MAP] loaded pcd={len(self.map_pcd)} tree={'YES' if self.map_tree else 'NO'}")
 
     def get_odom_pose(self):
-        """odom -> base_link TF 가져오기"""
+        # odom -> base
         try:
-            # 타임아웃을 줘서 Extrapolation 에러 방지
-            trans = self.tf_buffer.lookup_transform('odom', 'base_link', rclpy.time.Time())
-            q = [trans.transform.rotation.x, trans.transform.rotation.y, trans.transform.rotation.z, trans.transform.rotation.w]
-            _, _, yaw = tf_transformations.euler_from_quaternion(q)
-            return np.array([trans.transform.translation.x, trans.transform.translation.y, yaw])
-        except Exception as e:
-            # TF가 아직 안 들어오면 조용히 리턴
-            return None
-
-    def motion_update(self, current_odom_pose):
-        """Step 1: Motion Update (Prediction)"""
-        if self.last_odom_pose is None:
-            return
-
-        # Odom 기준 이동량 계산
-        dx = current_odom_pose[0] - self.last_odom_pose[0]
-        dy = current_odom_pose[1] - self.last_odom_pose[1]
-        dyaw = current_odom_pose[2] - self.last_odom_pose[2]
-        
-        # Angle Wrapping
-        dyaw = (dyaw + np.pi) % (2 * np.pi) - np.pi
-
-        # 로봇 로컬 좌표계로 변환
-        cos_yaw = np.cos(self.last_odom_pose[2])
-        sin_yaw = np.sin(self.last_odom_pose[2])
-        
-        local_dx = cos_yaw * dx + sin_yaw * dy
-        local_dy = -sin_yaw * dx + cos_yaw * dy
-
-        # 파티클 이동 (Vectorized)
-        p_cos = np.cos(self.particles[:, 2])
-        p_sin = np.sin(self.particles[:, 2])
-
-        # 노이즈 추가
-        noise_x = np.random.normal(0, self.odom_noise[0], self.num_particles)
-        noise_y = np.random.normal(0, self.odom_noise[1], self.num_particles)
-        noise_yaw = np.random.normal(0, self.odom_noise[2], self.num_particles)
-
-        self.particles[:, 0] += (p_cos * local_dx - p_sin * local_dy) + noise_x
-        self.particles[:, 1] += (p_sin * local_dx + p_cos * local_dy) + noise_y
-        self.particles[:, 2] += dyaw + noise_yaw
-        
-        self.particles[:, 2] = (self.particles[:, 2] + np.pi) % (2 * np.pi) - np.pi
-
-    def measurement_update(self, scan_msg):
-        """Step 2: Measurement Update (Correction)"""
-        if self.map_pcd is None:
-            return
-
-        # 1. Scan Downsampling
-        ranges = np.array(scan_msg.ranges)
-        # 유효 범위 필터링
-        valid_idxs = np.where((ranges > scan_msg.range_min) & (ranges < scan_msg.range_max))[0]
-        # 속도 향상을 위해 띄엄띄엄 샘플링
-        valid_idxs = valid_idxs[::self.scan_step]
-        
-        sampled_ranges = ranges[valid_idxs]
-        angles = scan_msg.angle_min + valid_idxs * scan_msg.angle_increment
-        
-        # 로봇 기준 스캔 좌표
-        scan_x = sampled_ranges * np.cos(angles)
-        scan_y = sampled_ranges * np.sin(angles)
-
-        # 2. Transform to World for all particles (Broadcasting)
-        p_cos = np.cos(self.particles[:, 2])[:, np.newaxis]
-        p_sin = np.sin(self.particles[:, 2])[:, np.newaxis]
-        p_x = self.particles[:, 0][:, np.newaxis]
-        p_y = self.particles[:, 1][:, np.newaxis]
-
-        # 파티클 위치 기준으로 스캔 점들을 월드 좌표로 변환
-        world_scan_x = p_x + scan_x * p_cos - scan_y * p_sin
-        world_scan_y = p_y + scan_x * p_sin + scan_y * p_cos
-        
-        # 거리 계산을 위해 펼침 (N_particles * N_scan_points, 2)
-        flat_scan_points = np.column_stack((world_scan_x.flatten(), world_scan_y.flatten()))
-
-        # 3. Find Nearest Neighbor Distance
-        # 최적화: 파티클 평균 위치 주변 맵만 잘라서 비교 (Local Map)
-        mean_x = np.mean(self.particles[:, 0])
-        mean_y = np.mean(self.particles[:, 1])
-        
-        dist_from_mean = np.linalg.norm(self.map_pcd - np.array([mean_x, mean_y]), axis=1)
-        local_map = self.map_pcd[dist_from_mean < 4.0] # 반경 4m 맵만 사용
-
-        if len(local_map) == 0:
-            return
-
-        dists = None
-
-        # [SAFEGUARD] Use Scipy if available, else NumPy
-        if HAS_SCIPY:
-            tree = cKDTree(local_map)
-            dists, _ = tree.query(flat_scan_points, k=1)
-        else:
-            # NumPy Fallback (Chunked to prevent memory explosion)
-            dists_list = []
-            chunk_size = 500 
-            for i in range(0, len(flat_scan_points), chunk_size):
-                chunk = flat_scan_points[i:i+chunk_size]
-                # (Chunk, 1, 2) - (1, Map, 2)
-                diff = chunk[:, np.newaxis, :] - local_map[np.newaxis, :, :]
-                # 가장 가까운 거리
-                min_d = np.min(np.linalg.norm(diff, axis=2), axis=1)
-                dists_list.append(min_d)
-            dists = np.concatenate(dists_list)
-
-        dists = dists.reshape(self.num_particles, -1)
-        
-        # 4. Weighting (Gaussian Likelihood)
-        # 거리가 가까울수록 가중치 높음
-        weights = np.exp(-(dists**2) / (2 * self.map_sigma**2))
-        self.weights = np.mean(weights, axis=1)
-        
-        # Normalize weights
-        if np.sum(self.weights) > 0:
-            self.weights /= np.sum(self.weights)
-        else:
-            self.weights = np.ones(self.num_particles) / self.num_particles
-
-    def resampling(self):
-        """Step 3: Resampling (Low Variance or Roulette)"""
-        n_eff = 1.0 / np.sum(self.weights**2)
-        # 파티클 다양성이 부족할 때만 리샘플링
-        if n_eff < self.num_particles / 2:
-            indices = np.random.choice(
-                self.num_particles, 
-                size=self.num_particles, 
-                p=self.weights
-            )
-            self.particles = self.particles[indices]
-            self.weights = np.ones(self.num_particles) / self.num_particles
-
-    def scan_callback(self, msg):
-        if self.processing or self.map_pcd is None:
-            return
-        self.processing = True
-
-        current_odom_pose = self.get_odom_pose()
-        if current_odom_pose is None:
-            self.processing = False
-            return
-
-        # 1. MCL Cycle (Motion -> Measurement -> Resample)
-        if self.last_odom_pose is not None:
-            # 조금이라도 움직였을 때만 연산 (부하 감소)
-            moved_dist = np.linalg.norm(current_odom_pose[:2] - self.last_odom_pose[:2])
-            moved_angle = abs(current_odom_pose[2] - self.last_odom_pose[2])
-            
-            if moved_dist > 0.02 or moved_angle > 0.02:
-                self.motion_update(current_odom_pose)
-                self.measurement_update(msg)
-                self.resampling()
-
-        self.last_odom_pose = current_odom_pose
-
-        # 2. Calculate Mean Pose (Weighted Average)
-        mean_x = np.average(self.particles[:, 0], weights=self.weights)
-        mean_y = np.average(self.particles[:, 1], weights=self.weights)
-        
-        # Yaw는 벡터 평균 (Circular Mean)
-        sin_avg = np.average(np.sin(self.particles[:, 2]), weights=self.weights)
-        cos_avg = np.average(np.cos(self.particles[:, 2]), weights=self.weights)
-        mean_yaw = np.arctan2(sin_avg, cos_avg)
-
-        # 3. Calculate map -> odom TF
-        # T_map_base = T_map_odom * T_odom_base
-        # T_map_odom = T_map_base * inv(T_odom_base)
-        
-        q_mean = tf_transformations.quaternion_from_euler(0, 0, mean_yaw)
-        T_map_base = pose_to_matrix([mean_x, mean_y, 0.0, q_mean[0], q_mean[1], q_mean[2], q_mean[3]])
-        
-        q_odom = tf_transformations.quaternion_from_euler(0, 0, current_odom_pose[2])
-        T_odom_base = pose_to_matrix([current_odom_pose[0], current_odom_pose[1], 0.0, q_odom[0], q_odom[1], q_odom[2], q_odom[3]])
-        
-        self.T_map_odom = T_map_base @ np.linalg.inv(T_odom_base)
-
-        # 4. Broadcast TF and Publish Pose
-        self.broadcast_tf(msg.header.stamp)
-        self.publish_pose(msg.header.stamp, mean_x, mean_y, mean_yaw)
-        
-        self.processing = False
-
-    def broadcast_tf(self, stamp):
-        t = TransformStamped()
-        t.header.stamp = stamp
-        t.header.frame_id = 'map'
-        t.child_frame_id = 'odom'
-        
-        t.transform.translation.x = self.T_map_odom[0, 3]
-        t.transform.translation.y = self.T_map_odom[1, 3]
-        t.transform.translation.z = 0.0
-        
-        q = tf_transformations.quaternion_from_matrix(self.T_map_odom)
-        t.transform.rotation.x = q[0]
-        t.transform.rotation.y = q[1]
-        t.transform.rotation.z = q[2]
-        t.transform.rotation.w = q[3]
-        
-        self.tf_broadcaster.sendTransform(t)
-
-    def publish_pose(self, stamp, x, y, yaw):
-        """[추가] 과제 제출용 /go1_pose 토픽 발행"""
-        pose_msg = PoseStamped()
-        pose_msg.header.stamp = stamp
-        pose_msg.header.frame_id = 'map'
-        
-        pose_msg.pose.position.x = x
-        pose_msg.pose.position.y = y
-        pose_msg.pose.position.z = 0.0
-        
-        q = tf_transformations.quaternion_from_euler(0, 0, yaw)
-        pose_msg.pose.orientation.x = q[0]
-        pose_msg.pose.orientation.y = q[1]
-        pose_msg.pose.orientation.z = q[2]
-        pose_msg.pose.orientation.w = q[3]
-        
-        self.pose_pub.publish(pose_msg)
-
-def main(args=None):
-    rclpy.init(args=args)
-    node = ParticleFilterLocalizer()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
-'''
-
-#!/usr/bin/env python3
-
-"""
-ROS2 global localizer node (Custom Particle Filter / MCL Implementation)
-- Implements Monte Carlo Localization from scratch (No Nav2).
-- Optimized with NumPy vectorization.
-- Safe fallback: Uses SciPy if available, otherwise pure NumPy.
-- Publishes /go1_pose for grading.
-- Broadcasts TF continuously using a timer.
-"""
-
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import TransformStamped, PoseStamped
-from nav_msgs.msg import OccupancyGrid
-from sensor_msgs.msg import LaserScan
-from tf2_ros import TransformBroadcaster, Buffer, TransformListener
-import tf_transformations
-import numpy as np
-
-# utils.py에서 함수 가져오기 (같은 폴더에 있어야 함)
-from utils import map_to_pcd, pose_to_matrix
-
-# [Safety Strategy] Check if scipy is installed
-try:
-    from scipy.spatial import cKDTree
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
-
-class ParticleFilterLocalizer(Node):
-    def __init__(self):
-        super().__init__('global_localizer')
-        
-        # 1. Parameters (Launch File에서 넘어온 값들)
-        self.declare_parameter('x', 0.0)
-        self.declare_parameter('y', 0.0)
-        self.declare_parameter('yaw', 0.0)
-        self.declare_parameter('num_particles', 500) 
-        
-        self.initial_x = self.get_parameter('x').value
-        self.initial_y = self.get_parameter('y').value
-        self.initial_yaw = self.get_parameter('yaw').value
-        self.num_particles = self.get_parameter('num_particles').value
-
-        # Warning if Scipy is missing
-        if not HAS_SCIPY:
-            self.get_logger().warn("SciPy not found! Running in slower NumPy fallback mode.")
-            if self.num_particles > 100:
-                self.num_particles = 100
-                self.get_logger().warn(f"Reduced particles to {self.num_particles} for performance.")
-
-        # Noise Parameters (Motion Model)
-        self.odom_noise = [0.2, 0.2, 0.02] # x, y, yaw std_dev
-        
-        # Sensor Model Parameters
-        self.scan_step = 15
-        self.map_sigma = 0.2 
-
-        # 2. ROS Setup
-        self.tf_broadcaster = TransformBroadcaster(self)
-        
-        # [Sim Time Sync] Buffer에 node=self를 넘겨서 시뮬레이션 시간 사용
-        self.tf_buffer = Buffer(node=self)
-        self.tf_listener = TransformListener(self.tf_buffer, self)
-
-        # Subscribers
-        self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
-        self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        
-        # Publisher for grading
-        self.pose_pub = self.create_publisher(PoseStamped, '/go1_pose', 10)
-
-        # 3. State Variables
-        self.map_pcd = None
-        self.particles = None 
-        self.weights = None   
-        self.T_map_odom = np.eye(4)
-        self.last_odom_pose = None
-        self.processing = False
-        
-        # 현재 추정 위치 (초기값으로 설정)
-        self.current_mean_pose = [self.initial_x, self.initial_y, self.initial_yaw]
-
-        # Initialize Particles
-        self.initialize_particles()
-        
-        # [핵심 수정] TF를 주기적으로 계속 발행하는 타이머 추가 (20Hz)
-        # 데이터 수신 여부와 상관없이 TF 트리를 유지시켜 줍니다.
-        self.tf_timer = self.create_timer(0.05, self.timer_callback)
-
-    def initialize_particles(self):
-        self.particles = np.empty((self.num_particles, 3))
-        self.particles[:, 0] = self.initial_x + np.random.normal(0, 0.2, self.num_particles)
-        self.particles[:, 1] = self.initial_y + np.random.normal(0, 0.2, self.num_particles)
-        self.particles[:, 2] = self.initial_yaw + np.random.normal(0, 0.1, self.num_particles)
-        self.weights = np.ones(self.num_particles) / self.num_particles
-        
-        # 초기 T_map_odom 계산 (초기 위치 기준)
-        q = tf_transformations.quaternion_from_euler(0, 0, self.initial_yaw)
-        # 초기에는 Odom이 (0,0)이라고 가정하고 T_map_odom = T_initial_pose
-        self.T_map_odom = pose_to_matrix([self.initial_x, self.initial_y, 0.0, q[0], q[1], q[2], q[3]])
-
-        self.get_logger().info(f"Initialized {self.num_particles} particles.")
-
-    def timer_callback(self):
-        """주기적으로 TF와 Pose를 발행하는 콜백"""
-        now = self.get_clock().now().to_msg()
-        self.broadcast_tf(now)
-        # Pose도 같이 쏴주면 좋음 (Rviz 확인용)
-        self.publish_pose(now, *self.current_mean_pose)
-
-    def map_callback(self, msg):
-        if self.map_pcd is None:
-            self.get_logger().info("Processing Map...")
-            self.map_pcd = map_to_pcd(msg, threshold=50)
-            self.get_logger().info(f"Map Loaded. {len(self.map_pcd)} points.")
-
-    def get_odom_pose(self):
-        try:
-            trans = self.tf_buffer.lookup_transform('odom', 'base_link', rclpy.time.Time())
-            q = [trans.transform.rotation.x, trans.transform.rotation.y, trans.transform.rotation.z, trans.transform.rotation.w]
-            _, _, yaw = tf_transformations.euler_from_quaternion(q)
-            return np.array([trans.transform.translation.x, trans.transform.translation.y, yaw])
+            tf = self.tf_buffer.lookup_transform(self.odom_frame, self.base_frame, rclpy.time.Time())
         except Exception:
             return None
 
-    def motion_update(self, current_odom_pose):
-        if self.last_odom_pose is None:
+        tx = tf.transform.translation.x
+        ty = tf.transform.translation.y
+        q = tf.transform.rotation
+        yaw = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+        return np.array([tx, ty, yaw], dtype=np.float64)
+
+    def motion_update(self, odom_now, odom_prev):
+        dx = odom_now[0] - odom_prev[0]
+        dy = odom_now[1] - odom_prev[1]
+        dyaw = wrap_angle(odom_now[2] - odom_prev[2])
+
+        cy = np.cos(odom_prev[2])
+        sy = np.sin(odom_prev[2])
+        local_dx = cy * dx + sy * dy
+        local_dy = -sy * dx + cy * dy
+
+        cp = np.cos(self.p[:, 2])
+        sp = np.sin(self.p[:, 2])
+
+        self.p[:, 0] += cp * local_dx - sp * local_dy + np.random.normal(0, self.odom_noise[0], self.N)
+        self.p[:, 1] += sp * local_dx + cp * local_dy + np.random.normal(0, self.odom_noise[1], self.N)
+        self.p[:, 2] = wrap_angle(self.p[:, 2] + dyaw + np.random.normal(0, self.odom_noise[2], self.N))
+
+    def measurement_update(self, scan: LaserScan):
+        if self.map_tree is None or self.map_pcd is None:
             return
 
-        dx = current_odom_pose[0] - self.last_odom_pose[0]
-        dy = current_odom_pose[1] - self.last_odom_pose[1]
-        dyaw = current_odom_pose[2] - self.last_odom_pose[2]
-        dyaw = (dyaw + np.pi) % (2 * np.pi) - np.pi
-
-        cos_yaw = np.cos(self.last_odom_pose[2])
-        sin_yaw = np.sin(self.last_odom_pose[2])
-        
-        local_dx = cos_yaw * dx + sin_yaw * dy
-        local_dy = -sin_yaw * dx + cos_yaw * dy
-
-        p_cos = np.cos(self.particles[:, 2])
-        p_sin = np.sin(self.particles[:, 2])
-
-        noise_x = np.random.normal(0, self.odom_noise[0], self.num_particles)
-        noise_y = np.random.normal(0, self.odom_noise[1], self.num_particles)
-        noise_yaw = np.random.normal(0, self.odom_noise[2], self.num_particles)
-
-        self.particles[:, 0] += (p_cos * local_dx - p_sin * local_dy) + noise_x
-        self.particles[:, 1] += (p_sin * local_dx + p_cos * local_dy) + noise_y
-        self.particles[:, 2] += dyaw + noise_yaw
-        self.particles[:, 2] = (self.particles[:, 2] + np.pi) % (2 * np.pi) - np.pi
-
-    def measurement_update(self, scan_msg):
-        if self.map_pcd is None:
+        ranges = np.asarray(scan.ranges, dtype=np.float64)
+        idx = np.where(
+            (ranges > scan.range_min) &
+            (ranges < scan.range_max) &
+            np.isfinite(ranges)
+        )[0]
+        if idx.size == 0:
             return
 
-        ranges = np.array(scan_msg.ranges)
-        valid_idxs = np.where((ranges > scan_msg.range_min) & (ranges < scan_msg.range_max))[0]
-        valid_idxs = valid_idxs[::self.scan_step]
-        
-        sampled_ranges = ranges[valid_idxs]
-        angles = scan_msg.angle_min + valid_idxs * scan_msg.angle_increment
-        
-        scan_x = sampled_ranges * np.cos(angles)
-        scan_y = sampled_ranges * np.sin(angles)
+        idx = idx[::self.scan_step]
+        if idx.size > self.max_scan_points:
+            idx = idx[:self.max_scan_points]
 
-        p_cos = np.cos(self.particles[:, 2])[:, np.newaxis]
-        p_sin = np.sin(self.particles[:, 2])[:, np.newaxis]
-        p_x = self.particles[:, 0][:, np.newaxis]
-        p_y = self.particles[:, 1][:, np.newaxis]
+        r = ranges[idx]
+        ang = scan.angle_min + idx * scan.angle_increment
+        sx = r * np.cos(ang)
+        sy = r * np.sin(ang)
 
-        world_scan_x = p_x + scan_x * p_cos - scan_y * p_sin
-        world_scan_y = p_y + scan_x * p_sin + scan_y * p_cos
-        
-        flat_scan_points = np.column_stack((world_scan_x.flatten(), world_scan_y.flatten()))
+        cp = np.cos(self.p[:, 2])[:, None]
+        sp = np.sin(self.p[:, 2])[:, None]
 
-        mean_x = np.mean(self.particles[:, 0])
-        mean_y = np.mean(self.particles[:, 1])
-        
-        dist_from_mean = np.linalg.norm(self.map_pcd - np.array([mean_x, mean_y]), axis=1)
-        local_map = self.map_pcd[dist_from_mean < 4.0] 
+        wx = self.p[:, 0][:, None] + sx[None, :] * cp - sy[None, :] * sp
+        wy = self.p[:, 1][:, None] + sx[None, :] * sp + sy[None, :] * cp
 
-        if len(local_map) == 0:
+        pts = np.column_stack((wx.reshape(-1), wy.reshape(-1)))
+        dists, _ = self.map_tree.query(pts, k=1)
+        dists = dists.reshape(self.N, -1)
+
+        inv2sig2 = 1.0 / (2.0 * (self.map_sigma ** 2))
+        ll = -np.mean((dists ** 2) * inv2sig2, axis=1)   # log-likelihood
+        ll -= np.max(ll)
+
+        w = np.exp(ll) + 1e-12
+        w /= np.sum(w)
+        self.w = w
+
+    def resample(self):
+        neff = 1.0 / np.sum(self.w ** 2)
+        if neff >= self.resample_thresh * self.N:
             return
 
-        dists = None
+        positions = (np.arange(self.N) + np.random.rand()) / self.N
+        idx = np.zeros(self.N, dtype=np.int32)
+        cumsum = np.cumsum(self.w)
 
-        if HAS_SCIPY:
-            tree = cKDTree(local_map)
-            dists, _ = tree.query(flat_scan_points, k=1)
-        else:
-            dists_list = []
-            chunk_size = 500 
-            for i in range(0, len(flat_scan_points), chunk_size):
-                chunk = flat_scan_points[i:i+chunk_size]
-                diff = chunk[:, np.newaxis, :] - local_map[np.newaxis, :, :]
-                min_d = np.min(np.linalg.norm(diff, axis=2), axis=1)
-                dists_list.append(min_d)
-            dists = np.concatenate(dists_list)
+        i = j = 0
+        while i < self.N:
+            if positions[i] < cumsum[j]:
+                idx[i] = j
+                i += 1
+            else:
+                j += 1
 
-        dists = dists.reshape(self.num_particles, -1)
-        
-        weights = np.exp(-(dists**2) / (2 * self.map_sigma**2))
-        self.weights = np.mean(weights, axis=1)
-        
-        if np.sum(self.weights) > 0:
-            self.weights /= np.sum(self.weights)
-        else:
-            self.weights = np.ones(self.num_particles) / self.num_particles
+        self.p = self.p[idx]
+        self.w[:] = 1.0 / self.N
 
-    def resampling(self):
-        n_eff = 1.0 / np.sum(self.weights**2)
-        if n_eff < self.num_particles / 2:
-            indices = np.random.choice(self.num_particles, size=self.num_particles, p=self.weights)
-            self.particles = self.particles[indices]
-            self.weights = np.ones(self.num_particles) / self.num_particles
+    def estimate_pose(self):
+        mx = np.sum(self.p[:, 0] * self.w)
+        my = np.sum(self.p[:, 1] * self.w)
+        cy = np.sum(np.cos(self.p[:, 2]) * self.w)
+        sy = np.sum(np.sin(self.p[:, 2]) * self.w)
+        myaw = np.arctan2(sy, cy)
+        return np.array([mx, my, myaw], dtype=np.float64)
 
-    def scan_callback(self, msg):
-        if self.processing or self.map_pcd is None:
-            return
-        self.processing = True
-
-        current_odom_pose = self.get_odom_pose()
-        if current_odom_pose is None:
-            self.processing = False
+    def scan_cb(self, scan: LaserScan):
+        if self.map_tree is None:
             return
 
-        if self.last_odom_pose is not None:
-            moved_dist = np.linalg.norm(current_odom_pose[:2] - self.last_odom_pose[:2])
-            moved_angle = abs(current_odom_pose[2] - self.last_odom_pose[2])
-            
-            if moved_dist > 0.02 or moved_angle > 0.02:
-                self.motion_update(current_odom_pose)
-                self.measurement_update(msg)
-                self.resampling()
+        self.scan_count += 1
 
-        self.last_odom_pose = current_odom_pose
+        odom = self.get_odom_pose()
+        if odom is None:
+            return
 
-        # Calculate Mean Pose
-        mean_x = np.average(self.particles[:, 0], weights=self.weights)
-        mean_y = np.average(self.particles[:, 1], weights=self.weights)
-        
-        sin_avg = np.average(np.sin(self.particles[:, 2]), weights=self.weights)
-        cos_avg = np.average(np.cos(self.particles[:, 2]), weights=self.weights)
-        mean_yaw = np.arctan2(sin_avg, cos_avg)
+        # motion update always
+        if self.last_odom is not None:
+            self.motion_update(odom, self.last_odom)
+        self.last_odom = odom
 
-        # 상태 업데이트 (타이머에서 퍼블리시할 용도)
-        self.current_mean_pose = [mean_x, mean_y, mean_yaw]
+        # PF update stride
+        if (self.scan_count % self.pf_update_stride) != 0:
+            return
 
-        # Calculate map -> odom TF
-        q_mean = tf_transformations.quaternion_from_euler(0, 0, mean_yaw)
-        T_map_base = pose_to_matrix([mean_x, mean_y, 0.0, q_mean[0], q_mean[1], q_mean[2], q_mean[3]])
-        
-        q_odom = tf_transformations.quaternion_from_euler(0, 0, current_odom_pose[2])
-        T_odom_base = pose_to_matrix([current_odom_pose[0], current_odom_pose[1], 0.0, q_odom[0], q_odom[1], q_odom[2], q_odom[3]])
-        
-        self.T_map_odom = T_map_base @ np.linalg.inv(T_odom_base)
-        
-        self.processing = False
+        self.measurement_update(scan)
+        self.resample()
 
-    def broadcast_tf(self, stamp):
+        est = self.estimate_pose()
+
+        # map->odom = map->base(est) * inv(odom->base)
+        ox, oy, oyaw = odom
+        ex, ey, eyaw = est
+
+        c = np.cos(eyaw)
+        s = np.sin(eyaw)
+
+        tx = ex - (c * ox - s * oy)
+        ty = ey - (s * ox + c * oy)
+        raw_tyaw = wrap_angle(eyaw - oyaw)
+
+        # 1:1 output (NO low-pass)
+        self.last_tf_map_to_odom[0] = tx
+        self.last_tf_map_to_odom[1] = ty
+        self.last_tf_map_to_odom[2] = raw_tyaw
+
+        if (self.scan_count % self.log_every_n_scans) == 0:
+            neff = 1.0 / np.sum(self.w ** 2)
+            self.get_logger().info(
+                f"[GLOBAL 1:1] map->odom x={tx:.2f} y={ty:.2f} yaw={np.rad2deg(raw_tyaw):.1f}deg neff={neff:.1f}"
+            )
+
+    def publish_tf_timer(self):
+        tx, ty, tyaw = self.last_tf_map_to_odom
+
         t = TransformStamped()
-        t.header.stamp = stamp
-        t.header.frame_id = 'map'
-        t.child_frame_id = 'odom'
-        
-        t.transform.translation.x = self.T_map_odom[0, 3]
-        t.transform.translation.y = self.T_map_odom[1, 3]
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = self.map_frame
+        t.child_frame_id = self.odom_frame
+
+        t.transform.translation.x = float(tx)
+        t.transform.translation.y = float(ty)
         t.transform.translation.z = 0.0
-        
-        q = tf_transformations.quaternion_from_matrix(self.T_map_odom)
-        t.transform.rotation.x = q[0]
-        t.transform.rotation.y = q[1]
-        t.transform.rotation.z = q[2]
-        t.transform.rotation.w = q[3]
-        
+
+        q = tf_transformations.quaternion_from_euler(0.0, 0.0, float(tyaw))
+        t.transform.rotation.x = float(q[0])
+        t.transform.rotation.y = float(q[1])
+        t.transform.rotation.z = float(q[2])
+        t.transform.rotation.w = float(q[3])
+
         self.tf_broadcaster.sendTransform(t)
 
-    def publish_pose(self, stamp, x, y, yaw):
-        pose_msg = PoseStamped()
-        pose_msg.header.stamp = stamp
-        pose_msg.header.frame_id = 'map'
-        pose_msg.pose.position.x = x
-        pose_msg.pose.position.y = y
-        pose_msg.pose.position.z = 0.0
-        q = tf_transformations.quaternion_from_euler(0, 0, yaw)
-        pose_msg.pose.orientation.x = q[0]
-        pose_msg.pose.orientation.y = q[1]
-        pose_msg.pose.orientation.z = q[2]
-        pose_msg.pose.orientation.w = q[3]
-        self.pose_pub.publish(pose_msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = ParticleFilterLocalizer()
-    rclpy.spin(node)
+    node = GlobalLocalizerPF1to1()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     node.destroy_node()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

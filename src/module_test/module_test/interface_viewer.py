@@ -89,8 +89,8 @@ class InterfaceViewer(Node):
 
         info_lines = [
             f"Detected objects: {', '.join(objects) if objects else 'None'}",
-            f"Distance to object: {distance:.2f} m" if distance is not None else "Distance to object: Unknown",
-            f"Robot dog says: {speech if speech else 'None'}",
+            f"Distance to object: {distance:.2f} m" if distance is not None else "No object detected",
+            f"Robot dog says: {speech if speech else 'Nothing'}",
         ]
 
         padding = 10

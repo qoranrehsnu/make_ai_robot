@@ -16,8 +16,7 @@ class PerceptionNode(Node):
         self.declare_parameter('model_filename', 'bestmodel.pt')
         self.declare_parameter('confidence_threshold', 0.5)
         self.declare_parameter('bark_distance_threshold', 3.0)
-        self.declare_parameter('target_classes', ["apple", "banana", "pizza", "badapple", "badbanana", "badpizza", 
-                     "toilet", "nurse", "redcone", "bluecone", "greencone", "box", "redtile", "stopsign"])
+        self.declare_parameter('target_classes', ["apple", "banana", "pizza"])
         self.declare_parameter('debug_mode', False)
         self.declare_parameter('model_dir', '') 
 
@@ -45,10 +44,6 @@ class PerceptionNode(Node):
         self.create_subscription(Image, '/camera_top/image', self.rgb_callback, 10)
         #Subscribe to Depth image from camera
         self.create_subscription(Image, '/camera_top/depth', self.depth_callback, 10)
-        #Subscribe to Point cloud
-        self.create_subscription(PointCloud2, '/camera_top/points', self.pointcloud_callback, 10)
-        #Subscribe to camera information
-        self.create_subscription(CameraInfo, '/camera_top/camera_info', self.info_callback, 10)
 
         # --- 4. Publishers ---
         #Publish bounded boxes image, labels of detected images, distance to detected objects and speech option
@@ -59,7 +54,6 @@ class PerceptionNode(Node):
 
         # Variables to store latest data
         self.latest_depth_image = None
-        self.camera_info = None
 
     def depth_callback(self, msg):
         try:
@@ -67,13 +61,6 @@ class PerceptionNode(Node):
             self.latest_depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
         except Exception as e:
             self.get_logger().error(f"Depth error: {e}")
-
-    def pointcloud_callback(self, msg):
-        # Placeholder
-        pass
-
-    def info_callback(self, msg):
-        self.camera_info = msg
 
     def rgb_callback(self, msg):
         if self.latest_depth_image is None or self.model is None:
@@ -87,24 +74,23 @@ class PerceptionNode(Node):
             results = self.model(cv_image, verbose=False, conf=self.conf_thres)
 
             labels_found = []
-            bark_command = "None"
+            bark_command = "..."
             closest_dist = -1.0
             
             #Process Detections
             for result in results:
                 for box in result.boxes:
-                    #1. Get Coordinates
+                    #1.Get Coordinates
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     cls_id = int(box.cls[0])
                     label = self.model.names[cls_id]
                     labels_found.append(label)
 
-                    #2. Calculate Center
+                    #2.Calculate Center
                     center_x = int((x1 + x2) / 2)
                     center_y = int((y1 + y2) / 2)
 
-                    #3. Get Distance from Depth Image
-                    # Check bounds to avoid crashes
+                    #3.Get Distance from Depth Image
                     cx = min(max(0, center_x), width - 1)
                     cy = min(max(0, center_y), height - 1)
                     
@@ -112,32 +98,27 @@ class PerceptionNode(Node):
                     
                     #Handle invalid depth (Inf/NaN)
                     if np.isinf(dist) or np.isnan(dist):
-                        dist_str = "Inf"
+                        dist_str = "unk"
                     else:
                         dist_str = f"{dist:.2f}m"
-                        closest_dist = dist # Track this for later when we publish depth
+                        closest_dist = dist #for depth publishing
 
-                    #4. Draw Bounding Box and Label
-                    color = (0, 255, 0) # Green
-                    if label in self.edible_items:
-                        color = (0, 255, 255) # Yellow for food
-
+                    #4.Draw bounding box (label+dist optional) 
+                    color = (0, 0, 255) #Red box
                     cv2.rectangle(cv_image, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(cv_image, f"{label} {dist_str}", (x1, y1-10), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    #cv2.putText(cv_image, f"{label} {dist_str}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
                     # 5. Check Bark Logic
                     #Rule 1: Edible?
                     if label in self.edible_items:
                         #Rule 2: Distance < 3.0m?
                         if not np.isinf(dist) and dist < self.bark_dist_thres:
-                            #Rule 3: Centered in middle 3/5ths (exclude sides of the image)?
+                            #Rule 3: Centered in middle 3/5th?
                             left_limit = width * (1/5)
                             right_limit = width * (4/5)
                             
                             if left_limit < center_x < right_limit:
                                 bark_command = "bark"
-                                cv2.putText(cv_image, "BARK!!!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
 
             #Publish Results
             #Image with boxes

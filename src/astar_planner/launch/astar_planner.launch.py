@@ -46,7 +46,7 @@ def generate_launch_description():
         default_value='false',
         description='Use Gazebo mode (true) or virtual simulator mode (false)'
     )
-    
+
     # Simulator Node
     simulator_node = Node(
         package='astar_planner',
@@ -70,6 +70,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'resolution': LaunchConfiguration('resolution'),
+            'use_sim_time': True,
         }]
     )
     

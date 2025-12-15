@@ -35,9 +35,7 @@ public:
     // Subscribers
     map_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
       "/map", 10,
-      rclcpp::QoS(rclcpp::KeepLast(1))
-        .transient_local()
-        .reliable(),
+      rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
       std::bind(&PathPlannerNode::mapCallback, this, std::placeholders::_1));
     
     current_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -352,4 +350,3 @@ int main(int argc, char * argv[])
   rclcpp::shutdown();
   return 0;
 }
-
