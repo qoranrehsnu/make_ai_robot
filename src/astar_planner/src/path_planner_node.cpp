@@ -23,8 +23,6 @@ public:
   {
     // Declare parameters
     this->declare_parameter<double>("resolution", 1.0);
-    this->declare_parameter<double>("inflate_cells", 1.0);
-
     resolution_ = this->get_parameter("resolution").as_double();
 
     // Initialize
