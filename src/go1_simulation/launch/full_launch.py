@@ -12,6 +12,8 @@ def generate_launch_description():
     pkg_loc = get_package_share_directory('localization')
     pkg_plan = get_package_share_directory('astar_planner')
     pkg_track = get_package_share_directory('path_tracker')
+    pkg_perc = get_package_share_directory('perception')
+    pkg_test = get_package_share_directory('module_test')
 
     # --- 2. Define The Launch Files ---
     #Simulation
@@ -44,9 +46,18 @@ def generate_launch_description():
             'use_sim_time': 'true'
         }.items()
     )
-
     path_tracker_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_track, 'launch', 'path_tracker_launch.py')),
+        launch_arguments={'use_sim_time': 'true'}.items()
+    )
+
+    #Perception & Viewer
+    perception_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_perc, 'launch', 'perception_launch.py')),
+        launch_arguments={'use_sim_time': 'true'}.items()
+    )
+    viewer_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_test, 'launch', 'interface_viewer.launch.py')),
         launch_arguments={'use_sim_time': 'true'}.items()
     )
 
@@ -65,4 +76,7 @@ def generate_launch_description():
     #Start Planning & Tracking Stack
     ld.add_action(TimerAction(period=55.0, actions=[planner_launch, path_tracker_launch]))
 
+    #Start Perception & viewer 
+    ld.add_action(TimerAction(period=57.0, actions=[perception_launch]))
+    ld.add_action(TimerAction(period=60.0, actions=[viewer_launch]))
     return ld
