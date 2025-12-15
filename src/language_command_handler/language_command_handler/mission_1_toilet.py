@@ -8,8 +8,8 @@ import math
 import subprocess
 
 # ★★★ CONFIGURATION ★★★
-TOILET_X = 7.2766 
-TOILET_Y = 0.2818
+TOILET_X = 7.45
+TOILET_Y = -1.0
 TOILET_YAW = 1.57 # 90 degrees
 STOP_DIST = 0.1   
 STOP_YAW = 0.2    
