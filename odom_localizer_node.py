@@ -21,9 +21,9 @@ class OdomLocalizer(Node):
     """
     Odom localizer (1:1 mode)
 
-    개선 #2:
-      - IMU orientation yaw 사용 (complementary)
-      - 정지 구간 gyro bias online update
+    개선 반영:
+      (2) ICP yaw 과신 방지 (gain ↓ + 회전 중 비활성)
+      (3) 회전 중 translation 완전 차단 → 감쇠
     """
 
     def __init__(self):
@@ -43,16 +43,19 @@ class OdomLocalizer(Node):
         self.declare_parameter("icp_min_corr", 25)
         self.declare_parameter("icp_huber", 0.25)
         self.declare_parameter("icp_damping", 1e-4)
-        self.declare_parameter("icp_cond_max", 1e9)
 
-        # yaw fusion
+        # ICP yaw
         self.declare_parameter("use_icp_yaw", True)
-        self.declare_parameter("icp_yaw_gain", 1.0)
+        self.declare_parameter("icp_yaw_gain", 0.5)          # 감소
         self.declare_parameter("icp_yaw_max_abs", np.deg2rad(10.0))
+        self.declare_parameter("yaw_gate_rate", 0.6)        # rad/s
 
-        # IMU yaw fusion (NEW)
+        # 회전 중 translation 감쇠
+        self.declare_parameter("rot_trans_scale", 0.2)      # 0이면 기존 방식
+
+        # IMU yaw fusion
         self.declare_parameter("use_imu_orientation_yaw", True)
-        self.declare_parameter("imu_yaw_gain", 0.2)   # 0~1
+        self.declare_parameter("imu_yaw_gain", 0.2)
 
         # gyro bias
         self.declare_parameter("bias_calib_seconds", 3.0)
@@ -64,7 +67,7 @@ class OdomLocalizer(Node):
         self.declare_parameter("stationary_ang_max", 0.06)
         self.declare_parameter("stationary_gyro_max", np.deg2rad(3.0))
 
-        # Logging
+        # logging
         self.declare_parameter("log_every_n_scans", 25)
 
         # Load params
@@ -77,6 +80,9 @@ class OdomLocalizer(Node):
         self.use_icp_yaw = self.get_parameter("use_icp_yaw").value
         self.icp_yaw_gain = self.get_parameter("icp_yaw_gain").value
         self.icp_yaw_max_abs = self.get_parameter("icp_yaw_max_abs").value
+        self.yaw_gate_rate = self.get_parameter("yaw_gate_rate").value
+
+        self.rot_trans_scale = self.get_parameter("rot_trans_scale").value
 
         self.use_imu_orientation_yaw = self.get_parameter("use_imu_orientation_yaw").value
         self.imu_yaw_gain = self.get_parameter("imu_yaw_gain").value
@@ -118,7 +124,7 @@ class OdomLocalizer(Node):
         self.calib_sum = 0.0
         self.calib_cnt = 0
 
-        self.get_logger().info("[ODOM] yaw stabilization enabled (IMU orientation + bias update)")
+        self.get_logger().info("[ODOM] ICP yaw softened + rotation translation scaled")
 
     def cmd_vel_cb(self, msg: Twist):
         self.latest_cmd_v = msg.linear.x
@@ -131,10 +137,8 @@ class OdomLocalizer(Node):
 
         wz = msg.angular_velocity.z
         self.latest_wz = wz
-
         now = self.get_clock().now().nanoseconds * 1e-9
 
-        # 초기 bias calib
         if (now - self.start_time) < self.bias_calib_seconds and abs(wz) < self.bias_calib_gyro_abs_max:
             self.calib_sum += wz
             self.calib_cnt += 1
@@ -150,16 +154,14 @@ class OdomLocalizer(Node):
         if dt <= 0.0 or dt > 0.5:
             return
 
-        # yaw predict (gyro)
         yaw_pred = wrap_angle(self.yaw + (wz - self.bg) * dt)
 
-        # yaw measure (orientation)
         if self.use_imu_orientation_yaw:
             q = msg.orientation
-            norm = np.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w)
-            if norm > 1e-6:
+            n = np.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w)
+            if n > 1e-6:
                 _, _, yaw_meas = tf_transformations.euler_from_quaternion(
-                    [q.x/norm, q.y/norm, q.z/norm, q.w/norm]
+                    [q.x/n, q.y/n, q.z/n, q.w/n]
                 )
                 err = wrap_angle(yaw_meas - yaw_pred)
                 self.yaw = wrap_angle(yaw_pred + self.imu_yaw_gain * err)
@@ -168,7 +170,6 @@ class OdomLocalizer(Node):
         else:
             self.yaw = yaw_pred
 
-        # online bias update (stationary)
         if (abs(self.latest_cmd_v) < self.stationary_lin_max and
             abs(self.latest_cmd_w) < self.stationary_ang_max and
             abs(wz) < self.stationary_gyro_max):
@@ -200,18 +201,26 @@ class OdomLocalizer(Node):
         dy_b = T[1, 2]
         dth = np.arctan2(T[1, 0], T[0, 0])
 
+        # 🔧 회전 중 translation 감쇠
+        if abs(self.latest_wz - self.bg) > self.yaw_gate_rate:
+            dx_b *= self.rot_trans_scale
+            dy_b *= self.rot_trans_scale
+
         dp = rot2(self.yaw) @ np.array([dx_b, dy_b])
         self.x += dp[0]
         self.y += dp[1]
 
-        if self.use_icp_yaw and abs(dth) < self.icp_yaw_max_abs:
+        # 🔧 ICP yaw: 직진 중 + gain ↓
+        if (self.use_icp_yaw and
+            abs(dth) < self.icp_yaw_max_abs and
+            abs(self.latest_wz - self.bg) < self.yaw_gate_rate):
             self.yaw = wrap_angle(self.yaw + self.icp_yaw_gain * dth)
 
         self.prev_scan_pcd = pcd
 
         if self.scan_count % self.log_every_n_scans == 0:
             self.get_logger().info(
-                f"[ODOM] x={self.x:.3f} y={self.y:.3f} yaw={np.rad2deg(self.yaw):.1f} bg={self.bg:.5f}"
+                f"[ODOM] x={self.x:.3f} y={self.y:.3f} yaw={np.rad2deg(self.yaw):.1f}deg bg={self.bg:.5f}"
             )
 
         self.publish_tf(scan.header.stamp)
