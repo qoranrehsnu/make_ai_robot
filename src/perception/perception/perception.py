@@ -56,6 +56,7 @@ class PerceptionNode(Node):
 
         # Variables to store latest data
         self.latest_depth_image = None
+        self.last_published_speech = None
 
     def parameter_callback(self, params):
         for param in params:
@@ -131,6 +132,9 @@ class PerceptionNode(Node):
                             if left_limit < center_x < right_limit:
                                 bark_command = "bark"
 
+            if bark_command != self.last_published_speech:
+                self.pub_speech.publish(String(data=bark_command))
+                self.last_published_speech = bark_command
             #Publish Results
             #Image with boxes
             self.pub_detection_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
@@ -138,8 +142,6 @@ class PerceptionNode(Node):
             self.pub_labels.publish(String(data=str(labels_found)))
             #Distances
             self.pub_distance.publish(Float32(data=closest_dist))
-            #Speech command
-            self.pub_speech.publish(String(data=bark_command))
 
         except Exception as e:
             self.get_logger().error(f"Inference Error: {e}")

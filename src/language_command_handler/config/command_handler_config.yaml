@@ -15,10 +15,19 @@ prompt: |
   ```python
   ACTION_NAME
   ```
-
+  RULES FOR MISSION INVOLVING CONE:
+    If the user specifies a color (red, blue, green), add it as a parameter of the form (redcone, bluecone, greencone):
+    Example: User "Find the red cone" -> Response: 
+    ```python
+    mission_3_cone.py --ros-args -p target_color:=redcone
+    ```
 action_candidates:
   node:
     - stop.py
     - go_front.py
+    - go_back.py 
+    - mission_1_toilet.py 
+    - mission_3_cone.py 
+    - mission_6_nurse.py
   launch:
     - go_back.launch.py

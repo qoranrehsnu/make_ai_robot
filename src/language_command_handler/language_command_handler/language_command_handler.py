@@ -137,32 +137,39 @@ class LanguageCommandHandler(Node):
         # Stop previous action first
         self.stop_previous_action()
         time.sleep(1)
-        
+
+        # Now this variable is defined!
+        parts = action_name.split()
+        script_name = parts[0]
+
         # Determine if it's a node or launch action
-        if action_name in self.node_action_candidates:
+        if script_name in self.node_action_candidates:
+            # Use full_action_string to include arguments
             command = f"source {self.workspace_install_path} && ros2 run {self.pkg_name} {action_name}"
             self.get_logger().info(f'Starting node action: {action_name}')
-        elif action_name in self.launch_action_candidates:
+            
+        elif script_name in self.launch_action_candidates:
             command = f"source {self.workspace_install_path} && ros2 launch {self.pkg_name} {action_name}"
             self.get_logger().info(f'Starting launch action: {action_name}')
+            
         else:
-            self.get_logger().error(f'Unknown action: {action_name}')
+            self.get_logger().error(f'Unknown action: {script_name}')
             return
         
         try:
-            # Start the new process in a new process group
+            # Start the new process in new group
             self.current_process = subprocess.Popen(
                 command,
                 shell=True,
                 executable='/bin/bash',
-                preexec_fn=os.setsid,  # Create new process group
+                preexec_fn=os.setsid,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             self.current_action = action_name
-            self.get_logger().info(f'Action {action_name} started with PID: {self.current_process.pid}')
+            self.get_logger().info(f'Action started with PID: {self.current_process.pid}')
         except Exception as e:
-            self.get_logger().error(f'Error starting action {action_name}: {str(e)}')
+            self.get_logger().error(f'Error starting action: {str(e)}')
 
     def language_command_callback(self, request, response):
         """
@@ -185,10 +192,12 @@ class LanguageCommandHandler(Node):
             selected_action = parse_LLM_response(llm_response)
             self.get_logger().info(f'Selected action: \n{selected_action}\n')
             
+            base_action = selected_action.split()[0]
+
             # Determine action type and create response message
-            if selected_action in self.node_action_candidates:
+            if base_action in self.node_action_candidates:
                 response.response_message = f'Start ROS2 node: {selected_action}'
-            elif selected_action in self.launch_action_candidates:
+            elif base_action in self.launch_action_candidates:
                 response.response_message = f'Start ROS2 launch: {selected_action}'
             else:
                 response.response_message = f'Unknown action: {selected_action}'

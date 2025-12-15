@@ -19,31 +19,9 @@ TOPIC_ROBOT_POSE = '/go1_pose'
 TOPIC_PLANNER_GOAL = '/goal_pose'
 TOPIC_SPEECH = '/robot_dog/speech'      
 
-def set_perception_targets(targets):
-    """
-    Sets the target_classes parameter of the perception_node dynamically.
-    targets: list of strings, e.g., ['apple', 'banana']
-    """
-    #Convert list to string format
-    param_str = str(targets).replace("'", '"')
-    cmd = [
-        "ros2", "param", "set", 
-        "/perception_node", 
-        "target_classes", 
-        param_str
-    ]
-    
-    # Run the command and wait for it to finish
-    try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
-        print(f"Perception node now targeting: {targets}")
-    except subprocess.CalledProcessError:
-        print("Failed to set perception targets")
-
 class ToiletMission(Node):
     def __init__(self):
         super().__init__('mission_1_toilet')
-        set_perception_targets(["toilet"])
         
         self.create_subscription(PoseStamped, TOPIC_ROBOT_POSE, self.pose_cb, 10)
         self.goal_pub = self.create_publisher(PoseStamped, TOPIC_PLANNER_GOAL, 10)
@@ -52,7 +30,7 @@ class ToiletMission(Node):
         self.current_x = None
         self.current_y = None
         self.current_yaw = None
-        self.goal_sent = False
+        self.last_bark_time = 0.0
 
         self.get_logger().info(f"Mission 1 Started: Heading to Toilet ({TOILET_X}, {TOILET_Y})")
         
@@ -69,9 +47,6 @@ class ToiletMission(Node):
         self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
 
     def send_goal_command(self):
-        if self.goal_sent:
-            return
-            
         goal = PoseStamped()
         goal.header.frame_id = "map"
         goal.header.stamp = self.get_clock().now().to_msg()
@@ -81,25 +56,25 @@ class ToiletMission(Node):
         goal.pose.orientation.w = math.cos(TOILET_YAW / 2.0)
 
         self.goal_pub.publish(goal)
-        self.get_logger().info(f"Sent Goal to Planner: {TOILET_X}, {TOILET_Y}")
-        self.goal_sent = True
 
     def control_loop(self):
         if self.current_x is None:
             return
 
+        # Calculate Error
         dist = math.sqrt((TOILET_X - self.current_x)**2 + (TOILET_Y - self.current_y)**2)
         yaw_diff = abs(TOILET_YAW - self.current_yaw)
         if yaw_diff > math.pi:
             yaw_diff = 2*math.pi - yaw_diff
 
-        if dist < STOP_DIST:
-            if yaw_diff < STOP_YAW:
-                self.get_logger().info("Arrived! Barking...")
+        # Check Arrival
+        if dist < STOP_DIST and yaw_diff < STOP_YAW:
+            now = self.get_clock().now().nanoseconds / 1e9
+            
+            # Bark every 3 seconds to confirm arrival
+            if now - self.last_bark_time > 3.0:
                 self.speech_pub.publish(String(data="bark"))
-                raise SystemExit
-            else:
-                self.get_logger().info(f"Near target, aligning... (Yaw Error: {yaw_diff:.2f})")
+                self.last_bark_time = now
 
 def main():
     rclpy.init()

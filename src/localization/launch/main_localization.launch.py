@@ -63,16 +63,20 @@ def generate_launch_description():
         ),
 
         # 3. Global localizer
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(loc_pkg_dir, 'launch', 'global_localizer.launch.py')
-            ),
-            launch_arguments={
-                'use_sim_time': use_sim_time,
-                'x': x,
-                'y': y,
-                'yaw': yaw
-            }.items(),
+        Node(
+            package='localization',
+            executable='global_localizer_node.py',
+            name='global_localizer_node',
+            output='screen',
+            parameters=[
+                {'use_sim_time': use_sim_time},
+                {'init_x': x},
+                {'init_y': y},
+                {'init_yaw': yaw},
+                {'num_particles': 700},
+                {'init_std_xy': 0.3},
+                {'init_std_yaw_deg': 10.0}, 
+            ]
         ),
 
         # 4. ✅ Pose publisher (METHOD B)
