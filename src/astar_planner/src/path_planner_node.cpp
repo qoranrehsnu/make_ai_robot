@@ -154,7 +154,14 @@ private:
     // Publish goal marker for visualization
     publishGoalMarker();
     
-    // Plan path immediately when goal is set
+      // ✅ 여기 추가
+    if (!has_map_) {
+      RCLCPP_ERROR(this->get_logger(), "[goalCallback] No map yet -> cannot replan");
+    }
+    if (!has_current_pose_) {
+      RCLCPP_ERROR(this->get_logger(), "[goalCallback] No current pose (/go1_pose) yet -> cannot replan");
+    }
+
     if (has_map_ && has_current_pose_) {
       replanPath();
     }
@@ -163,6 +170,18 @@ private:
   void replanPath()
   {
     if (!has_map_ || !has_current_pose_ || !has_goal_) {
+
+      if (!has_map_) {
+      RCLCPP_ERROR(this->get_logger(), "[replanPath] Map not received yet (/map)");
+      }
+      if (!has_current_pose_) {
+        RCLCPP_ERROR(this->get_logger(), "[replanPath] Current pose not received yet (/go1_pose)");
+      }
+      if (!has_goal_) {
+        RCLCPP_ERROR(this->get_logger(), "[replanPath] Goal not received yet (/goal_pose)");
+      }
+
+    
       return;
     }
     
