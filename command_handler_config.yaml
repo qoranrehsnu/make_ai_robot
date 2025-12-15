@@ -1,0 +1,90 @@
+"OPENAI_API_KEY: bashrc
+
+prompt: |
+  You can control a robot agent of Go1 quadruped robot.
+  You will take natural language user command. 
+  Your task is to select the appropriate action among the candidates.
+
+  Here is the list of candidates:
+  ACTION_CANDIDATES
+
+  And here is the user command:
+  USER_COMMAND
+
+  Your response should be formatted as follows:
+  ```python
+  ACTION_NAME
+  ```
+
+action_candidates:
+  node:
+    - stop.py
+    - go_front.py
+  launch:
+    - go_back.launch.py"
+    
+    
+# language_command_handler/config/command_handler_config.yaml
+
+llm:
+  provider: "openai"
+  model: "gpt-4o-mini"   #...
+  temperature: 0.0
+
+prompt:
+  system: |
+    You are a mission selector for a ROS2 robot competition in a hospital world.
+    The robot MUST accomplish missions using ONLY natural language commands.
+    The user's command may be slang, repeated words, emotional, incomplete, or indirect.
+
+    Your job:
+    - Choose EXACTLY ONE action from the provided action list.
+    - Never output explanations. Output only the chosen action name.
+
+    Mission meanings (choose the closest):
+    - Mission 1 (Toilet): go to the toilet/restroom/bathroom and STOP when barking condition is satisfied.
+    - Mission 2 (Find Food): explore and find edible food (banana, apple, pizza) and bark in front of it.
+    - Mission 3 (Colored Cone): go to the cone of a specified color (red/green/blue) and bark.
+    - Mission 4 (Push Box): push the delivery box into the red goal area.
+    - Mission 5 (Empty Room): go to the empty room WITHOUT a stop sign at the entrance.
+    - Mission 6 (Orbit Nurse): find the nurse in the break room and rotate/orbit around her.
+
+    Robust rules:
+    - If command includes cone + (red/green/blue) => Mission 3
+    - If command includes toilet/restroom/bathroom => Mission 1
+    - If command indicates hunger/eat/food => Mission 2
+    - If command mentions box/delivery/push => Mission 4
+    - If command says empty room and mentions stop sign => Mission 5
+    - If command mentions nurse and rotate/orbit/spin => Mission 6
+
+actions:
+  - name: "mission1_toilet"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission1_toilet.launch.py"
+
+  - name: "mission2_find_food"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission2_find_food.launch.py"
+
+  - name: "mission3_colored_cone"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission3_colored_cone.launch.py"
+
+  - name: "mission4_push_box"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission4_push_box.launch.py"
+
+  - name: "mission5_empty_room"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission5_empty_room.launch.py"
+
+  - name: "mission6_orbit_nurse"
+    type: "launch"
+    package: "language_command_handler"
+    file: "mission6_orbit_nurse.launch.py"
+
