@@ -239,9 +239,19 @@ void PathTracker::MainLoop() {
         }
 
         _CheckForward();
-
+        /*
         if (_path.size() < 2) {
             throw CustomException::ErrorType::NotImplementedPath;
+        }
+        */
+        if (_path.size() < 2) {
+            Action stop_action; 
+            stop_action.vx = 0.0;
+            stop_action.wz = 0.0;
+            _PubAction(stop_action);
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000, 
+                "Waiting for Global Path from Planner...");
+            return; 
         }
 
         const auto is_goal = _IsGoal();
