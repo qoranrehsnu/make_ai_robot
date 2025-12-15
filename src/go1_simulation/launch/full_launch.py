@@ -71,12 +71,12 @@ def generate_launch_description():
     ld.add_action(TimerAction(period=5.0, actions=[control_node]))
 
     #Start Localization
-    ld.add_action(TimerAction(period=50.0, actions=[main_loc_launch]))
+    ld.add_action(TimerAction(period=40.0, actions=[main_loc_launch]))
 
     #Start Planning & Tracking Stack
-    ld.add_action(TimerAction(period=55.0, actions=[planner_launch, path_tracker_launch]))
+    ld.add_action(TimerAction(period=45.0, actions=[planner_launch, path_tracker_launch]))
 
     #Start Perception & viewer 
-    ld.add_action(TimerAction(period=57.0, actions=[perception_launch]))
-    ld.add_action(TimerAction(period=60.0, actions=[viewer_launch]))
+    ld.add_action(TimerAction(period=47.0, actions=[perception_launch]))
+    ld.add_action(TimerAction(period=50.0, actions=[viewer_launch]))
     return ld

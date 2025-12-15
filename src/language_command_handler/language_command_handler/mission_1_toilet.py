@@ -5,12 +5,13 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 import math
+import subprocess
 
 # ★★★ CONFIGURATION ★★★
-TOILET_X = 5.0   
-TOILET_Y = 2.0
+TOILET_X = 7.2766 
+TOILET_Y = 0.2818
 TOILET_YAW = 1.57 # 90 degrees
-STOP_DIST = 0.5   
+STOP_DIST = 0.1   
 STOP_YAW = 0.2    
 
 # Topics (Update if needed)
@@ -18,9 +19,31 @@ TOPIC_ROBOT_POSE = '/go1_pose'
 TOPIC_PLANNER_GOAL = '/goal_pose'
 TOPIC_SPEECH = '/robot_dog/speech'      
 
+def set_perception_targets(targets):
+    """
+    Sets the target_classes parameter of the perception_node dynamically.
+    targets: list of strings, e.g., ['apple', 'banana']
+    """
+    #Convert list to string format
+    param_str = str(targets).replace("'", '"')
+    cmd = [
+        "ros2", "param", "set", 
+        "/perception_node", 
+        "target_classes", 
+        param_str
+    ]
+    
+    # Run the command and wait for it to finish
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
+        print(f"Perception node now targeting: {targets}")
+    except subprocess.CalledProcessError:
+        print("Failed to set perception targets")
+
 class ToiletMission(Node):
     def __init__(self):
         super().__init__('mission_1_toilet')
+        set_perception_targets(["toilet"])
         
         self.create_subscription(PoseStamped, TOPIC_ROBOT_POSE, self.pose_cb, 10)
         self.goal_pub = self.create_publisher(PoseStamped, TOPIC_PLANNER_GOAL, 10)

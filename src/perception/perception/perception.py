@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 import os
+from rcl_interfaces.msg import SetParametersResult
 
 class PerceptionNode(Node):
     def __init__(self):
@@ -27,6 +28,7 @@ class PerceptionNode(Node):
         self.bark_dist_thres = self.get_parameter('bark_distance_threshold').get_parameter_value().double_value
         self.edible_items = self.get_parameter('target_classes').get_parameter_value().string_array_value
         self.debug = self.get_parameter('debug_mode').get_parameter_value().bool_value
+        self.add_on_set_parameters_callback(self.parameter_callback)
 
         # --- 2. Load YOLO Model ---
         self.model = None
@@ -54,6 +56,15 @@ class PerceptionNode(Node):
 
         # Variables to store latest data
         self.latest_depth_image = None
+
+    def parameter_callback(self, params):
+        for param in params:
+            if param.name == 'target_classes':
+                if param.type_ == param.Type.STRING_ARRAY:
+                    self.edible_items = param.value
+                    self.get_logger().info(f"Now looking for: {self.edible_items}")
+                    return SetParametersResult(successful=True)
+        return SetParametersResult(successful=True)
 
     def depth_callback(self, msg):
         try:

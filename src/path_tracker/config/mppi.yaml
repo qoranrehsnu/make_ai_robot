@@ -37,7 +37,7 @@ path_tracker:
     subgoal_cost_weight: 0.0
     velocity_cost_weight: 0.0
     heading_cost_weight: 0.0
-    map_cost_weight: 0.0
+    map_cost_weight: 5.0
     use_const: false    
     const_thres: 0.5
     tracking_thres: 5.0
@@ -73,7 +73,7 @@ path_tracker:
     wheelBase: 0.512             # Distance between front and rear (m)
     
     maxLinVel: 0.4               # Maximum linear velocity (m/s)
-    maxAngVel: 0.75              # Maximum angular velocity (rad/s)
+    maxAngVel: 0.15              # Maximum angular velocity (rad/s)
     
     # ===========================================================================
     # Coordinate Frames

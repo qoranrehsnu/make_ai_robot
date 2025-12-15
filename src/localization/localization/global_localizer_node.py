@@ -36,7 +36,7 @@ class GlobalLocalizerPF1to1(Node):
         self.declare_parameter("base_frame", "base")  # 네 환경 기준
 
         # PF params
-        self.declare_parameter("num_particles", 350)
+        self.declare_parameter("num_particles", 700)
         self.declare_parameter("init_x", 0.0)
         self.declare_parameter("init_y", 1.0)
         self.declare_parameter("init_yaw", 0.0)

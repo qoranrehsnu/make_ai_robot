@@ -23,9 +23,10 @@ public:
   {
     // Declare parameters
     this->declare_parameter<double>("resolution", 1.0);
-    
+    this->declare_parameter<double>("inflate_cells", 1.0);
+
     resolution_ = this->get_parameter("resolution").as_double();
-    
+
     // Initialize
     has_map_ = false;
     has_goal_ = false;
@@ -82,6 +83,7 @@ private:
       }
     }
     
+    inflateObstacles(3);
     astar_.setMap(map_grid_);
     
     if (!has_map_) {
@@ -90,6 +92,52 @@ private:
     }
   }
   
+  void inflateObstacles(int radius)
+  {
+    // Safety check
+    if (radius <= 0) return;
+    int height = map_grid_.size();
+    if (height == 0) return;
+    int width = map_grid_[0].size();
+
+    //Identify all original obstacles first
+    std::vector<std::pair<int, int>> obstacles;
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        if (map_grid_[y][x] == 1) {
+          obstacles.push_back({x, y});
+        }
+      }
+    }
+
+    //Expand around each obstacle
+    for (const auto& obs : obstacles) {
+      int ox = obs.first;
+      int oy = obs.second;
+
+      for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+          
+          // OPTIONAL: Euclidean Check (Makes inflation circular instead of square)
+          // If you comment this out, corners will be inflated as squares (Chebyshev distance).
+          // Keeping it creates a more natural "rounded" safety buffer.
+          if (dx*dx + dy*dy > radius*radius) continue;
+
+          int nx = ox + dx;
+          int ny = oy + dy;
+
+          // Bounds check to prevent segfaults
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            map_grid_[ny][nx] = 1; // Mark neighbor as occupied
+          }
+        }
+      }
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "Inflated obstacles by %d cells (%zu original obstacles)", 
+      radius, obstacles.size());
+  }
+
   void currentPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
   {
     if (!has_current_pose_) {
