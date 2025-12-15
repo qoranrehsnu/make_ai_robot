@@ -96,9 +96,7 @@ class ToiletMission(Node):
         if dist < STOP_DIST:
             if yaw_diff < STOP_YAW:
                 self.get_logger().info("Arrived! Barking...")
-                msg = String()
-                msg.data = "bark"
-                self.speech_pub.publish(msg)
+                self.speech_pub.publish(String(data="bark"))
                 raise SystemExit
             else:
                 self.get_logger().info(f"Near target, aligning... (Yaw Error: {yaw_diff:.2f})")
