@@ -14,30 +14,19 @@ def generate_launch_description():
     pkg_track = get_package_share_directory('path_tracker')
 
     # --- 2. Define The Launch Files ---
-    # A. Simulation
+    #Simulation
     sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_sim, 'launch', 'go1.gazebo.launch.py')),
         launch_arguments={'use_gt_pose': 'false'}.items()
     )
 
-    # B. Map Server (Load Static Map)
-    map_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(pkg_sim, 'launch', 'visualize_map.launch.py')),
+    #Localization (Odom + Global)
+    main_loc_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(pkg_loc, 'launch', 'main_localization.launch.py')),
         launch_arguments={'use_sim_time': 'true'}.items()
     )
 
-    # C. Localization (Odom + Global)
-    odom_loc_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(pkg_loc, 'launch', 'odom_localizer.launch.py')),
-        launch_arguments={'use_sim_time': 'true'}.items()
-    )
-    
-    global_loc_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(pkg_loc, 'launch', 'global_localizer.launch.py')),
-        launch_arguments={'use_sim_time': 'true'}.items()
-    )
-
-    #D. Robot Control
+    #Robot Control
     control_node = ExecuteProcess(
         cmd=[
             'gnome-terminal', '--', 
@@ -46,7 +35,7 @@ def generate_launch_description():
         ],
         output='screen'
     )
-    # E. Planner & Tracker
+    #Planner & Tracker
     planner_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_plan, 'launch', 'astar_planner.launch.py')),
         launch_arguments={
@@ -66,15 +55,14 @@ def generate_launch_description():
 
     # 0s: Start Sim and Map
     ld.add_action(sim_launch)
-    ld.add_action(map_launch)
 
-    # 5s: Start Control (Pop-up window appears)
+    #Start Control (Pop-up window appears)
     ld.add_action(TimerAction(period=5.0, actions=[control_node]))
 
-    # 10s: Start Localization
-    ld.add_action(TimerAction(period=50.0, actions=[odom_loc_launch, global_loc_launch]))
+    #Start Localization
+    ld.add_action(TimerAction(period=50.0, actions=[main_loc_launch]))
 
-    # 15s: Start Planning & Tracking Stack
+    #Start Planning & Tracking Stack
     ld.add_action(TimerAction(period=55.0, actions=[planner_launch, path_tracker_launch]))
 
     return ld
