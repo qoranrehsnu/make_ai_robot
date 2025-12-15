@@ -60,104 +60,103 @@ prompt:
     --------------------------------------------------
     Robust decision rules (IMPORTANT):
     --------------------------------------------------
+
+    # Mission 1: Toilet
     - If the command mentions "toilet", "restroom", or "bathroom":
-        -> mission1_toilet
+        -> mission_1_toilet
 
-    - If the command indicates hunger or eating
-      (hungry, food, eat, edible):
-        -> mission2_find_food
+    - If the command expresses urgency related to using the toilet:
+        * "I need the bathroom"
+        * "I need to pee"
+        * "I need to poop"
+        * "I can't hold it"
+      then:
+        -> mission_1_toilet
 
+    # Mission 2: Find Food 
+    - If the command mentions hunger or eating,
+      or contains keywords such as:
+        * "hungry"
+        * "food"
+        * "eat"
+        * "edible"
+        * "something to eat"
+        * "I want to eat"
+        * "I need food"
+      then:
+        -> mission_2_food
+
+    # Mission 3: Colored Cone
     - If the command mentions a cone AND a color:
-        * "red cone", "red one"   -> mission3_red_cone
-        * "green cone", "green one" -> mission3_green_cone
-        * "blue cone", "blue one" -> mission3_blue_cone
+        * "red cone", "red one"     -> mission_3_cone_red
+        * "green cone", "green one" -> mission_3_cone_green
+        * "blue cone", "blue one"   -> mission_3_cone_blue
 
+    # Mission 4: Push Box
     - If the command mentions box, delivery, or pushing:
-        -> mission4_push_box
+        -> mission_4_box
 
-    - If the command mentions an empty room AND stop sign:
-        -> mission5_empty_room
+    # Mission 5: Empty Room
+    - If the command mentions an empty room AND a stop sign:
+        -> mission_5_emptyroom
 
+    # Mission 6: Orbit Nurse
     - If the command mentions nurse AND
       rotate / orbit / spin / circle:
-        -> mission6_orbit_nurse
+        -> mission_6_nurse
 
     --------------------------------------------------
     Fallback rule (SAFETY):
     --------------------------------------------------
     If the command does NOT clearly match any mission,
     choose the safest default action:
-        -> mission1_toilet
+        -> mission_1_toilet
 
 
 # =========================================================
 # Action Definitions
 # =========================================================
-# Each action launches exactly ONE mission.
-# Only one mission should be active at a time.
+# Action name == file name (strictly unified)
 
 actions:
 
-  # -------------------------
-  # Mission 1: Toilet
-  # -------------------------
-  - name: "mission1_toilet"
+  - name: "mission_1_toilet"
     type: "launch"
     package: "language_command_handler"
     file: "mission_1_toilet.py"
 
-
-  # -------------------------
-  # Mission 2: Find Food
-  # -------------------------
-  - name: "mission2_find_food"
+  - name: "mission_2_food"
     type: "launch"
     package: "language_command_handler"
     file: "mission_2_food.py"
 
-
-  # -------------------------
-  # Mission 3: Colored Cones
-  # (Color-separated actions)
-  # -------------------------
-  - name: "mission3_red_cone"
+  # Mission 3: Colored Cone (single file)
+  - name: "mission_3_cone_red"
     type: "launch"
     package: "language_command_handler"
     file: "mission_3_cone.py"
 
-  - name: "mission3_green_cone"
+  - name: "mission_3_cone_green"
     type: "launch"
     package: "language_command_handler"
     file: "mission_3_cone.py"
 
-  - name: "mission3_blue_cone"
+  - name: "mission_3_cone_blue"
     type: "launch"
     package: "language_command_handler"
     file: "mission_3_cone.py"
 
-
-  # -------------------------
-  # Mission 4: Push Box
-  # -------------------------
-  - name: "mission4_push_box"
+  - name: "mission_4_box"
     type: "launch"
     package: "language_command_handler"
     file: "mission_4_box.py"
 
-
-  # -------------------------
-  # Mission 5: Empty Room
-  # -------------------------
-  - name: "mission5_empty_room"
+  - name: "mission_5_emptyroom"
     type: "launch"
     package: "language_command_handler"
     file: "mission_5_emptyroom.py"
 
-
-  # -------------------------
-  # Mission 6: Orbit Nurse
-  # -------------------------
-  - name: "mission6_orbit_nurse"
+  - name: "mission_6_nurse"
     type: "launch"
     package: "language_command_handler"
     file: "mission_6_nurse.py"
