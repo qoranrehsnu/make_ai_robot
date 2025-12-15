@@ -280,7 +280,8 @@ geometry_msgs::msg::Twist PathTracker::_CalculateTwistFromPose(
     // rclcpp::Time/Duration 연산으로 dt 계산 (초 단위)
     const double dt = (curr - _prev_timestamp).seconds();
     
-    
+
+
     // dt 가드 (역행/정지/이상치)
     if (!std::isfinite(dt) || dt <= 0.0 || dt < 1e-6 || dt > 1.0) {
         // 필요하면 dt>1.0 임계값은 센서 Hz에 맞게 조정(예: 0.2~0.5 등)
@@ -305,8 +306,7 @@ geometry_msgs::msg::Twist PathTracker::_CalculateTwistFromPose(
     twist.linear.x = robot_velocity.x();
     twist.linear.y = robot_velocity.y();
     twist.linear.z = robot_velocity.z();
-    
-    
+
 
     // 각속도 (yaw 래핑 처리)
     const double cy = _GetYawFromQuaternion(msg->pose.orientation);
@@ -315,7 +315,7 @@ geometry_msgs::msg::Twist PathTracker::_CalculateTwistFromPose(
     if (dyaw > M_PI)  dyaw -= 2*M_PI;
     if (dyaw < -M_PI) dyaw += 2*M_PI;
     twist.angular.z = dyaw / dt;
-    
+
 
     _prev_pose = *msg;
     _prev_timestamp = curr;

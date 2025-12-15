@@ -25,12 +25,10 @@ void AStar::setMap(const std::vector<std::vector<int>>& map)
 
 double AStar::calculateHeuristic(const GridCell& a, const GridCell& b) const
 {
-  //Euclidean distance
-  double x_pow = static_cast<double>(pow(a.x - b.x, 2));
-  double y_pow = static_cast<double>(pow(a.y - b.y, 2));
-  double euclidean = sqrt(x_pow + y_pow);
-
-  return euclidean;
+  // Euclidean distance
+  double dx = static_cast<double>(a.x - b.x);
+  double dy = static_cast<double>(a.y - b.y);
+  return std::sqrt(dx * dx + dy * dy);
 }
 
 bool AStar::isValid(const GridCell& cell) const
@@ -185,4 +183,3 @@ std::vector<GridCell> AStar::findPath(const GridCell& start, const GridCell& goa
 }
 
 }  // namespace astar_planner
-

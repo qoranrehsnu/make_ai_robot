@@ -34,7 +34,7 @@ def generate_launch_description():
         executable='path_tracker_node',
         name='path_tracker',
         output='screen',
-        parameters=[mppi_config_path],
+        parameters=[mppi_config_path, {'use_sim_time': True}],
         emulate_tty=True
     )
 

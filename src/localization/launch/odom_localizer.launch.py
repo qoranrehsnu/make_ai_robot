@@ -24,4 +24,3 @@ def generate_launch_description():
     ld.add_action(odom_localizer_node)
 
     return ld
-

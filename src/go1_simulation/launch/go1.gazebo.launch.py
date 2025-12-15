@@ -271,13 +271,17 @@ def generate_launch_description():
     # ld.add_action(set_nv_offload_cmd)
     # ld.add_action(set_glx_vendor_cmd)
     ld.add_action(set_gz_resource_path)
+    ld.add_action(start_gazebo_world_cmd)
 
-    ld.add_action(TimerAction(period=3.0, actions=[start_gazebo_world_cmd]))
-    ld.add_action(TimerAction(period=5.0, actions=[start_gazebo_ros_bridge_cmd]))
-    ld.add_action(TimerAction(period=7.0, actions=[robot_state_publisher_cmd]))
-    ld.add_action(TimerAction(period=9.0, actions=[load_controllers_cmd]))
-    ld.add_action(TimerAction(period=11.0, actions=[start_gazebo_ros_spawner_cmd]))
-    ld.add_action(TimerAction(period=13.0, actions=[go1_pointcloud_publisher_cmd]))
-    ld.add_action(TimerAction(period=15.0, actions=[go1_gt_pose_publisher_cmd]))
+    # 5s: Start Bridge & Robot State Publisher
+    ld.add_action(TimerAction(period=5.0, actions=[start_gazebo_ros_bridge_cmd, robot_state_publisher_cmd]))
 
+    # 20s: Spawn Robot (Giving map 20s to load meshes/collisions)
+    ld.add_action(TimerAction(period=20.0, actions=[start_gazebo_ros_spawner_cmd]))
+
+    # 25s: Load Controllers (Must happen AFTER spawn)
+    ld.add_action(TimerAction(period=25.0, actions=[load_controllers_cmd]))
+
+    # 27s: Auxiliary Nodes
+    ld.add_action(TimerAction(period=27.0, actions=[go1_pointcloud_publisher_cmd, go1_gt_pose_publisher_cmd]))
     return ld
