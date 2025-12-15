@@ -54,6 +54,46 @@ def generate_launch_description():
 '''
 
 #!/usr/bin/env python3
+'''
+import os
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    # 1. Launch Arguments 선언
+    return LaunchDescription([
+        # (1) 시뮬레이션 시간 사용 여부 (기본값 true)
+        DeclareLaunchArgument(
+            'use_sim_time', 
+            default_value='true',
+            description='Use simulation (Gazebo) clock if true'
+        ),
+        
+        # (2) 초기 위치 설정
+        DeclareLaunchArgument('x', default_value='0.0'),
+        DeclareLaunchArgument('y', default_value='0.0'),
+        DeclareLaunchArgument('yaw', default_value='0.0'),
+
+        # 2. 노드 실행
+        Node(
+            package='localization',
+            executable='global_localizer_node.py',
+            name='global_localizer_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': LaunchConfiguration('use_sim_time'), 
+                'x': LaunchConfiguration('x'),
+                'y': LaunchConfiguration('y'),
+                'yaw': LaunchConfiguration('yaw')
+            }]
+        )
+    ])
+'''
+
+#hj
+#!/usr/bin/env python3
 
 import os
 from launch import LaunchDescription
