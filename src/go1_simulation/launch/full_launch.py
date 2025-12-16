@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    # --- 1. Get Package Directories ---
+    #et Package Directories
     pkg_sim = get_package_share_directory('go1_simulation')
     pkg_loc = get_package_share_directory('localization')
     pkg_plan = get_package_share_directory('astar_planner')
@@ -25,7 +25,7 @@ def generate_launch_description():
     y_val = LaunchConfiguration('y')
     yaw_val = LaunchConfiguration('yaw')
 
-    # --- 2. Define The Launch Files ---
+    #Define The Launch Files
     sim_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg_sim, 'launch', 'go1.gazebo.launch.py')),
         launch_arguments={
@@ -86,7 +86,7 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': 'true'}.items()
     )
 
-    # --- 3. Create the Sequence  ---
+    #Startup the Sequence
     ld = LaunchDescription()
     ld.add_action(x_arg)
     ld.add_action(y_arg)

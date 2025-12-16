@@ -24,27 +24,26 @@ public:
   : Node("path_planner_node")
   {
     // =========================
-    // ✅ [수정 1] 파라미터 추가
     // - obstacle_threshold: 벽 판정 더 보수적으로
     // - inflation_radius: 벽을 더 두껍게(셀 단위)
     // =========================
-    this->declare_parameter<int>("obstacle_threshold", 30);   // (기존 고정 50 -> 파라미터화)
-    this->declare_parameter<int>("inflation_radius", 3);      // (신규)4는 안움직임 2는 너무 붙음
+    this->declare_parameter<int>("obstacle_threshold", 30);
+    this->declare_parameter<int>("inflation_radius", 3); 
 
     obstacle_threshold_ = this->get_parameter("obstacle_threshold").as_int();
     inflation_radius_   = this->get_parameter("inflation_radius").as_int();
 
-    // (기존에 있던 resolution 파라미터는 실제로 map_msg_의 resolution을 쓰고 있어서 의미가 거의 없음)
+    //기존에 있던 resolution 파라미터는 실제로 map_msg_의 resolution을 쓰고 있어서 의미가 거의 없음
     this->declare_parameter<double>("resolution", 1.0);
     resolution_ = this->get_parameter("resolution").as_double();
 
-    // Initialize
+    //Initialize
     has_map_ = false;
     has_goal_ = false;
     has_current_pose_ = false;
     goal_reached_ = false;
 
-    // Subscribers
+    //Subscribers
     map_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
       "/map", 
       rclcpp::QoS(rclcpp::KeepLast(1))
@@ -81,10 +80,8 @@ private:
     int width = msg->info.width;
     int height = msg->info.height;
 
-    // =========================
-    // ✅ [수정 2] threshold를 50 고정에서 -> 파라미터 obstacle_threshold_ 사용
-    // ✅ [수정 3] inflation을 위해 먼저 원본 binary 맵을 만들고, 그 다음 팽창 맵을 생성
-    // =========================
+    //threshold를 50 고정에서 -> 파라미터 obstacle_threshold_ 사용
+    //inflation을 위해 먼저 원본 binary 맵을 만들고, 그 다음 팽창 맵을 생성
     std::vector<std::vector<int>> raw_grid(height, std::vector<int>(width, 0));
     map_grid_.assign(height, std::vector<int>(width, 0));
 
@@ -92,8 +89,7 @@ private:
       for (int x = 0; x < width; ++x) {
         int index = y * width + x;
 
-        // OccupancyGrid: -1 unknown, 0 free, 100 occupied
-        // ✅ 더 보수적으로: > obstacle_threshold_ 이거나 unknown이면 obstacle
+        //obstacle_threshold_ 이거나 unknown이면 obstacle
         if (msg->data[index] > obstacle_threshold_ || msg->data[index] < 0) {
           raw_grid[y][x] = 1;
         } else {
@@ -102,10 +98,7 @@ private:
       }
         }
 
-    // =========================
-    // ✅ [수정 4] 장애물 인플레이션(벽 두껍게)
-    // raw_grid에서 obstacle이면 주변 R칸까지 obstacle로 확장
-     // ----------------------------
+    //장애물 인플레이션(벽 두껍게)
     int R = std::max(0, inflation_radius_);
     int R2 = R * R;
 
@@ -128,15 +121,11 @@ private:
         }
       }
     }
-    // =========================
-    // ✅ [추가] Distance transform (BFS) -> cost_map 생성
-    // map_grid_[y][x] == 1 : obstacle
-    // dist[y][x] : obstacle까지의 거리(셀)
-    // =========================
+
+    //Distance transform (BFS) -> cost_map 생성
     std::vector<std::vector<int>> dist(height, std::vector<int>(width, 1e9));
     std::deque<std::pair<int,int>> q;
-
-    // 1) obstacle을 seed로 큐에 넣기
+    //obstacle을 seed로 큐에 넣기
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         if (map_grid_[y][x] == 1) {
@@ -145,8 +134,7 @@ private:
         }
       }
     }
-
-    // 2) 4-neighbor BFS로 최단거리 확산
+    //4-neighbor BFS로 최단거리 확산
     const int dy4[4] = {1,-1,0,0};
     const int dx4[4] = {0,0,1,-1};
 
@@ -166,27 +154,24 @@ private:
       }
     }
 
-    // 3) dist -> cost_map (벽 가까울수록 비용 크게)
-    //    safe_cells 안쪽은 penalty를 강하게 주기
+    //dist -> cost_map (벽 가까울수록 비용 크게)
     std::vector<std::vector<float>> cost_map(height, std::vector<float>(width, 1.0f));
-
-    // ✅ [추가] 파라미터로 빼도 되지만, 일단 상수로 시작 추천
-    const int safe_cells = 6;      // 벽에서 최소 몇 셀 떨어지고 싶냐
-    const float w = 5.0f;          // 벽 회피 강도(커질수록 더 멀어짐)
+    const int safe_cells = 6;
+    const float w = 5.0f;
 
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         if (map_grid_[y][x] == 1) {
-          cost_map[y][x] = 1e9f;   // obstacle은 매우 큰 비용
+          cost_map[y][x] = 1e9f;
           continue;
         }
 
         int d = dist[y][x];
         if (d < safe_cells) {
           float t = static_cast<float>(safe_cells - d);
-          cost_map[y][x] = 1.0f + w * t * t;   // ✅ quadratic penalty
+          cost_map[y][x] = 1.0f + w * t * t;
         } else {
-          cost_map[y][x] = 1.0f;              // 멀면 기본 비용
+          cost_map[y][x] = 1.0f;
         }
       }
     }

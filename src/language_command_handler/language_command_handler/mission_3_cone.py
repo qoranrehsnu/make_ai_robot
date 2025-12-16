@@ -7,21 +7,20 @@ import math
 import subprocess
 import time
 
-# ★★★ SEARCH LOCATIONS (The 3 slots where cones might be) ★★★
+#Search spots (+middle point to avoid chairs)
 SEARCH_SPOTS = [
     (4.2, 5.15, 1.875),
-    (1.2, 15.4, 0.785),   # Spot A (Top)
-    (1.2, 15.4, 1.57),   # Spot B (Middle)
-    (1.2, 15.4, 2.355)   # Spot C (Bottom)
+    (1.2, 15.4, 0.785),
+    (1.2, 15.4, 1.57),
+    (1.2, 15.4, 2.355) 
 ]
 STOP_DIST = 0.5
-SEARCH_WAIT_TIME = 2.0  # How long to wait/stare at a cone before giving up
+SEARCH_WAIT_TIME = 2.0
 
-# Topics
+#Topics
 TOPIC_ROBOT_POSE = '/go1_pose'          
 TOPIC_PLANNER_GOAL = '/goal_pose'
 TOPIC_SPEECH = '/robot_dog/speech'
-# TODO: Update this to your actual perception topic!
 TOPIC_DETECTIONS = '/detections/labels' 
 
 def set_perception_targets(targets):
@@ -40,24 +39,16 @@ class ConeMission(Node):
     def __init__(self):
         super().__init__('mission_3_cone')
         
-        # 1. Get Target Color from LLM (default: red)
+        #Get Target Color from LLM (default: red) and configure target
         self.declare_parameter('target_color', 'redcone')
         self.target_color = self.get_parameter('target_color').get_parameter_value().string_value
-        
-        # 2. Configure Perception to ONLY look for that color
-        # This simplifies logic: If we see ANYTHING, it must be the right color.
         set_perception_targets([self.target_color])
-        
-        # 3. State Management
-        self.spot_index = 0  # Which spot are we checking?
-        self.state = "MOVING" # MOVING -> SCANNING -> FOUND
+
+        self.spot_index = 0 
+        self.state = "MOVING" 
         self.scan_start_time = 0
         self.object_detected = False
-
-        # 4. ROS Setup
         self.create_subscription(PoseStamped, TOPIC_ROBOT_POSE, self.pose_cb, 10)
-        
-        # TODO: Change 'String' to the actual message type of your perception node (e.g., Detection2DArray)
         self.create_subscription(String, TOPIC_DETECTIONS, self.detection_cb, 10)
         
         self.goal_pub = self.create_publisher(PoseStamped, TOPIC_PLANNER_GOAL, 10)
@@ -81,15 +72,11 @@ class ConeMission(Node):
         Since we set the filter to ONLY 'red' (or blue/green), 
         any detection implies we found it.
         """
-        # If msg.data is not empty, we saw it!
-        # logic depends on your message type. Assuming String here:
         if self.target_color in msg.data.lower(): 
             self.object_detected = True
 
     def send_goal_command(self):
         if self.state != "MOVING": return
-        
-        # Go to the current search spot
         target_x, target_y, target_yaw = SEARCH_SPOTS[self.spot_index]
         
         goal = PoseStamped()
@@ -104,14 +91,14 @@ class ConeMission(Node):
     def control_loop(self):
         if self.current_x is None: return
         
-        # 1. Check if we found it (Priority)
+        #1. Check if we found it (Priority)
         if self.object_detected and self.spot_index > 0:
             self.get_logger().info(f"FOUND THE {self.target_color} CONE! Barking...")
             self.speech_pub.publish(String(data="bark"))
             self.goal_pub.publish(PoseStamped(header=self.get_clock().now().to_msg())) # Stop goal (optional)
             raise SystemExit
 
-        # 2. Logic for moving between spots
+        #2. Logic for moving between spots
         target_x, target_y, _ = SEARCH_SPOTS[self.spot_index]
         dist = math.sqrt((target_x - self.current_x)**2 + (target_y - self.current_y)**2)
         
@@ -120,16 +107,14 @@ class ConeMission(Node):
                     self.get_logger().info("Passed Waypoint 0. Moving directly to next spot...")
                     self.spot_index += 1
                     self.speech_pub.publish(String(data="..."))
-                    self.object_detected = False # Clear any accidental sightings
+                    self.object_detected = False
                     return
             if dist < STOP_DIST:
                 self.get_logger().info(f"Arrived at Spot {self.spot_index+1}. Scanning...")
                 self.state = "SCANNING"
                 self.scan_start_time = time.time()
-                self.object_detected = False # Reset detection for this new look
-
+                self.object_detected = False
         elif self.state == "SCANNING":
-            # Wait for a few seconds to let the camera see
             if time.time() - self.scan_start_time > SEARCH_WAIT_TIME:
                 self.get_logger().info(f"Not found at Spot {self.spot_index+1}. Moving to next...")
                 self.spot_index += 1

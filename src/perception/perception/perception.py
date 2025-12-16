@@ -30,7 +30,7 @@ class PerceptionNode(Node):
         self.debug = self.get_parameter('debug_mode').get_parameter_value().bool_value
         self.add_on_set_parameters_callback(self.parameter_callback)
 
-        # --- 2. Load YOLO Model ---
+        #Load YOLO Model
         self.model = None
         model_path = os.path.join(model_dir, filename)
         self.get_logger().info(f"Loading image detection model from: {model_path}")
@@ -40,14 +40,11 @@ class PerceptionNode(Node):
         except Exception as e:
             self.get_logger().error(f"FATAL: Could not load model. Error: {e}")
 
-        # --- 3. Subscribers ---
+        #Declare subscribers (rgb and depth image)
         self.bridge = CvBridge()
-        #Subscribe to RGB image from camera
         self.create_subscription(Image, '/camera_top/image', self.rgb_callback, 10)
-        #Subscribe to Depth image from camera
         self.create_subscription(Image, '/camera_top/depth', self.depth_callback, 10)
 
-        # --- 4. Publishers ---
         #Publish bounded boxes image, labels of detected images, distance to detected objects and speech option
         self.pub_detection_img = self.create_publisher(Image, '/camera/detections/image', 10)
         self.pub_labels = self.create_publisher(String, '/detections/labels', 10)
@@ -92,17 +89,17 @@ class PerceptionNode(Node):
             #Process Detections
             for result in results:
                 for box in result.boxes:
-                    #1.Get Coordinates
+                    #Get Coordinates
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
                     cls_id = int(box.cls[0])
                     label = self.model.names[cls_id]
                     labels_found.append(label)
 
-                    #2.Calculate Center
+                    #Calculate Center
                     center_x = int((x1 + x2) / 2)
                     center_y = int((y1 + y2) / 2)
 
-                    #3.Get Distance from Depth Image
+                    #Get Distance from Depth Image
                     cx = min(max(0, center_x), width - 1)
                     cy = min(max(0, center_y), height - 1)
                     
@@ -115,12 +112,12 @@ class PerceptionNode(Node):
                         dist_str = f"{dist:.2f}m"
                         closest_dist = dist #for depth publishing
 
-                    #4.Draw bounding box (label+dist optional) 
+                    #Draw bounding box (label+dist optional) 
                     color = (0, 0, 255) #Red box
                     cv2.rectangle(cv_image, (x1, y1), (x2, y2), color, 2)
                     #cv2.putText(cv_image, f"{label} {dist_str}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                    # 5. Check Bark Logic
+                    #Check Bark Logic
                     #Rule 1: Edible?
                     if label in self.edible_items:
                         #Rule 2: Distance < 3.0m?
@@ -135,12 +132,10 @@ class PerceptionNode(Node):
             if bark_command != self.last_published_speech:
                 self.pub_speech.publish(String(data=bark_command))
                 self.last_published_speech = bark_command
-            #Publish Results
+            #Publish Results (image with bounding box, labels and closest distance to object)
             #Image with boxes
             self.pub_detection_img.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
-            #Labels
             self.pub_labels.publish(String(data=str(labels_found)))
-            #Distances
             self.pub_distance.publish(Float32(data=closest_dist))
 
         except Exception as e:

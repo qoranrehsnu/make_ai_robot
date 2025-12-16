@@ -7,17 +7,16 @@ from nav_msgs.msg import Odometry
 import math
 import subprocess
 
-# ★★★ CONFIGURATION ★★★
 TOILET_X = 7.45
 TOILET_Y = -1.1
-TOILET_YAW = 1.57 # 90 degrees
+TOILET_YAW = 1.57
 #TOILET_X = 2
 #TOILET_Y = -11.0
 #TOILET_YAW = -2.54
 STOP_DIST = 0.2   
 STOP_YAW = 0.2    
 
-# Topics (Update if needed)
+#Topics
 TOPIC_ROBOT_POSE = '/go1_pose'          
 TOPIC_PLANNER_GOAL = '/goal_pose'
 TOPIC_SPEECH = '/robot_dog/speech'      
