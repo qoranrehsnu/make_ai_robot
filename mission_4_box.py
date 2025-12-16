@@ -1,52 +1,39 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, Twist
+from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import String
 import math
 
 # ================= CONFIG =================
 
-WAYPOINTS = {
-    'LEFT':   {'x': -3.0, 'y': 10.0, 'yaw': 1.57},
-    'CENTER': {'x': 1.0,  'y': 9.0,  'yaw': 1.57},
-    'RIGHT':  {'x': 3.0,  'y': 10.0, 'yaw': 1.57}
+SEARCH_POINTS = {
+    'LEFT':   (-3.0, 10.0, 1.57),
+    'CENTER': (1.0,  9.0,  1.57),
+    'RIGHT':  (3.0, 10.0,  1.57)
 }
 
 PUSH_READY_POSES = {
-    'LEFT':   {'x': -3.0, 'y': 12.0, 'yaw': 0.0},
-    'CENTER': {'x': 0.2,  'y': 15.0, 'yaw': -1.57},
-    'RIGHT':  {'x': 3.0,  'y': 12.0, 'yaw': 3.141592}
+    'LEFT':   (-3.0, 12.0, 0.0),
+    'CENTER': (0.2,  15.0, -1.57),
+    'RIGHT':  (3.0,  12.0, 3.14)
 }
 
 GOAL_ZONE_POSES = {
-    'LEFT':   {'x': -0.6, 'y': 12.0, 'yaw': 0.0},
-    'CENTER': {'x': -0.2, 'y': 12.5, 'yaw': -1.57},
-    'RIGHT':  {'x': 0.6,  'y': 12.0, 'yaw': 3.141592}
+    'LEFT':   (-0.6, 12.0, 0.0),
+    'CENTER': (-0.2, 12.5, -1.57),
+    'RIGHT':  (0.6,  12.0, 3.14)
 }
 
-SEARCH_ORDER = ['LEFT', 'CENTER', 'RIGHT']
+SEARCH_ORDER = ["LEFT", "CENTER", "RIGHT"]
 
-POS_THRESH = 0.4
-YAW_THRESH = 0.25
-
-V_FWD  = 0.3
-V_PUSH = 0.25
-K_YAW  = 1.6
+ARRIVAL_THRESH = 0.6
 
 TOPIC_POSE   = "/go1_pose"
-TOPIC_CMD    = "/cmd_vel"
+TOPIC_GOAL   = "/goal_pose"
 TOPIC_SPEECH = "/robot_dog/speech"
 
 # ==========================================
-
-
-def normalize_angle(a):
-    while a > math.pi:
-        a -= 2 * math.pi
-    while a < -math.pi:
-        a += 2 * math.pi
-    return a
 
 
 class Mission4PushBox(Node):
@@ -54,51 +41,47 @@ class Mission4PushBox(Node):
         super().__init__("mission_4_box")
 
         self.create_subscription(PoseStamped, TOPIC_POSE, self.pose_cb, 10)
-        self.cmd_pub = self.create_publisher(Twist, TOPIC_CMD, 10)
+
+        self.goal_pub = self.create_publisher(PoseStamped, TOPIC_GOAL, 10)
         self.speech_pub = self.create_publisher(String, TOPIC_SPEECH, 10)
 
         self.x = None
         self.y = None
-        self.yaw = None
 
         self.search_idx = 0
-        self.found_side = None
+        self.box_side = None
         self.state = "SEARCH"
+        self.last_goal = None
 
-        self.get_logger().info("Mission 4 started (minimal search policy)")
+        self.get_logger().info("Mission 4 started (A* full navigation)")
 
-        self.create_timer(0.05, self.control_loop)
+        self.create_timer(0.2, self.control_loop)
 
+    # ---------------- Callbacks ----------------
     def pose_cb(self, msg):
         self.x = msg.pose.position.x
         self.y = msg.pose.position.y
 
-        q = msg.pose.orientation
-        siny = 2*(q.w*q.z + q.x*q.y)
-        cosy = 1 - 2*(q.y*q.y + q.z*q.z)
-        self.yaw = math.atan2(siny, cosy)
+    # ---------------- Helpers ----------------
+    def publish_goal(self, x, y, yaw):
+        if self.last_goal == (x, y, yaw):
+            return
 
-    def stop(self):
-        self.cmd_pub.publish(Twist())
+        goal = PoseStamped()
+        goal.header.frame_id = "map"
+        goal.header.stamp = self.get_clock().now().to_msg()
+        goal.pose.position.x = x
+        goal.pose.position.y = y
+        goal.pose.orientation.z = math.sin(yaw / 2.0)
+        goal.pose.orientation.w = math.cos(yaw / 2.0)
 
-    def move_to(self, tx, ty, tyaw, v=V_FWD):
-        dx = tx - self.x
-        dy = ty - self.y
-        dist = math.hypot(dx, dy)
+        self.goal_pub.publish(goal)
+        self.last_goal = (x, y, yaw)
 
-        yaw_err = normalize_angle(tyaw - self.yaw)
-
-        cmd = Twist()
-        cmd.linear.x = v
-        cmd.angular.z = K_YAW * yaw_err
-        self.cmd_pub.publish(cmd)
-
-        return dist, abs(yaw_err)
-
-    def reached(self, tx, ty, tyaw):
-        d = math.hypot(tx - self.x, ty - self.y)
-        y = abs(normalize_angle(tyaw - self.yaw))
-        return d < POS_THRESH and y < YAW_THRESH
+    def reached(self, x, y):
+        if self.x is None:
+            return False
+        return math.hypot(self.x - x, self.y - y) < ARRIVAL_THRESH
 
     # ---------------- FSM ----------------
     def control_loop(self):
@@ -108,44 +91,39 @@ class Mission4PushBox(Node):
         # ---------- SEARCH ----------
         if self.state == "SEARCH":
             side = SEARCH_ORDER[self.search_idx]
-            wp = WAYPOINTS[side]
+            x, y, yaw = SEARCH_POINTS[side]
 
-            self.move_to(wp['x'], wp['y'], wp['yaw'])
+            self.publish_goal(x, y, yaw)
 
-            if self.reached(wp['x'], wp['y'], wp['yaw']):
-                self.found_side = side
+            if self.reached(x, y):
+                self.box_side = side
                 self.state = "GO_PUSH_READY"
+                self.last_goal = None
                 self.get_logger().info(f"Box found at {side}")
             return
 
         # ---------- GO PUSH READY ----------
         if self.state == "GO_PUSH_READY":
-            pose = PUSH_READY_POSES[self.found_side]
-            self.move_to(pose['x'], pose['y'], pose['yaw'])
+            x, y, yaw = PUSH_READY_POSES[self.box_side]
+            self.publish_goal(x, y, yaw)
 
-            if self.reached(pose['x'], pose['y'], pose['yaw']):
+            if self.reached(x, y):
                 self.state = "PUSH"
-                self.get_logger().info("Aligned → pushing")
+                self.last_goal = None
             return
 
-        # ---------- PUSH ----------
+        # ---------- PUSH (A* to goal zone) ----------
         if self.state == "PUSH":
-            goal = GOAL_ZONE_POSES[self.found_side]
-            cmd = Twist()
-            cmd.linear.x = V_PUSH
-            cmd.angular.z = 0.0
-            self.cmd_pub.publish(cmd)
+            x, y, yaw = GOAL_ZONE_POSES[self.box_side]
+            self.publish_goal(x, y, yaw)
 
-            if self.reached(goal['x'], goal['y'], goal['yaw']):
-                self.stop()
+            if self.reached(x, y):
                 self.speech_pub.publish(String(data="bark"))
                 self.state = "SUCCESS"
                 self.get_logger().info("Mission 4 SUCCESS")
             return
 
-        # ---------- SUCCESS ----------
         if self.state == "SUCCESS":
-            self.stop()
             return
 
 
