@@ -27,7 +27,8 @@ action_candidates:
     - go_front.py
     - go_back.py 
     - mission_1_toilet.py 
-    - mission_3_cone.py 
+    - mission_3_cone.py
+    - mission_5_emptyroom.py
     - mission_6_nurse.py
   launch:
     - go_back.launch.py

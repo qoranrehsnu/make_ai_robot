@@ -27,6 +27,7 @@ install(
     language_command_handler/language_command_handler.py
     language_command_handler/mission_1_toilet.py
     language_command_handler/mission_3_cone.py
+    language_command_handler/mission_5_emptyroom.py
     language_command_handler/mission_6_nurse.py
     language_command_handler/go_front.py
     language_command_handler/go_back.py

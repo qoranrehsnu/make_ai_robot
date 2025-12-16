@@ -9,9 +9,12 @@ import subprocess
 
 # ★★★ CONFIGURATION ★★★
 TOILET_X = 7.45
-TOILET_Y = -1.0
+TOILET_Y = -1.1
 TOILET_YAW = 1.57 # 90 degrees
-STOP_DIST = 0.1   
+#TOILET_X = 2
+#TOILET_Y = -11.0
+#TOILET_YAW = -2.54
+STOP_DIST = 0.2   
 STOP_YAW = 0.2    
 
 # Topics (Update if needed)

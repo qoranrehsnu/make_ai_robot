@@ -9,6 +9,7 @@ import time
 
 # ★★★ SEARCH LOCATIONS (The 3 slots where cones might be) ★★★
 SEARCH_SPOTS = [
+    (4.2, 5.15, 1.875),
     (1.2, 15.4, 0.785),   # Spot A (Top)
     (1.2, 15.4, 1.57),   # Spot B (Middle)
     (1.2, 15.4, 2.355)   # Spot C (Bottom)
@@ -104,7 +105,7 @@ class ConeMission(Node):
         if self.current_x is None: return
         
         # 1. Check if we found it (Priority)
-        if self.object_detected:
+        if self.object_detected and self.spot_index > 0:
             self.get_logger().info(f"FOUND THE {self.target_color} CONE! Barking...")
             self.speech_pub.publish(String(data="bark"))
             self.goal_pub.publish(PoseStamped(header=self.get_clock().now().to_msg())) # Stop goal (optional)
@@ -115,6 +116,12 @@ class ConeMission(Node):
         dist = math.sqrt((target_x - self.current_x)**2 + (target_y - self.current_y)**2)
         
         if self.state == "MOVING":
+            if self.spot_index == 0:
+                    self.get_logger().info("Passed Waypoint 0. Moving directly to next spot...")
+                    self.spot_index += 1
+                    self.speech_pub.publish(String(data="..."))
+                    self.object_detected = False # Clear any accidental sightings
+                    return
             if dist < STOP_DIST:
                 self.get_logger().info(f"Arrived at Spot {self.spot_index+1}. Scanning...")
                 self.state = "SCANNING"
