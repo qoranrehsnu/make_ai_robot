@@ -9,7 +9,7 @@ import ast # Required for parsing perception string lists
 
 # ================= CONFIG =================
 # Room entrances (Target for Path Planner)
-ROOM1_ENTRY = [6.69, 10.66, 1.57] # Added Yaw
+ROOM1_ENTRY = [6.4, 10.66, 1.57] # Added Yaw
 ROOM2_ENTRY = [-6.69, 10.66, 1.57]
 
 # Room interior box regions [xmin, xmax, ymin, ymax]
