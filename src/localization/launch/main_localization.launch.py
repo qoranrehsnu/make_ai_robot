@@ -18,7 +18,7 @@ def generate_launch_description():
     map_file = os.path.join(sim_pkg_dir, 'maps', 'hospital.yaml')
 
     # launch arguments
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     x = LaunchConfiguration('x', default='0.0')
     y = LaunchConfiguration('y', default='1.0')
     yaw = LaunchConfiguration('yaw', default='0.0')

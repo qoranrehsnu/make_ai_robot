@@ -109,7 +109,7 @@ def generate_launch_description():
 
     declare_z_cmd = DeclareLaunchArgument(
         name='z',
-        default_value='0.5',
+        default_value='0.25',
         description='z component of initial position, meters')
 
     declare_roll_cmd = DeclareLaunchArgument(
